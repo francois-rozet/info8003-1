@@ -4,7 +4,7 @@ import math
 import numpy as np
 import random
 
-from typing import Callable, List, Tuple
+from typing import Callable, Iterable, List, Tuple
 
 
 # 0. Helpers
