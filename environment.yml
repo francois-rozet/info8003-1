@@ -1,0 +1,9 @@
+name: optimal
+channels:
+  - defaults
+dependencies:
+  - pip=20.3.3
+  - python=3.7.9
+  - pip:
+    - matplotlib==3.3.4
+    - numpy==1.20.0
