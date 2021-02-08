@@ -46,6 +46,13 @@ if __name__ == '__main__':
     decimals = 3
     eps = 10 ** -decimals
 
+    ## Choose N
+
+    N = math.ceil(math.log((eps / (2 * B)) * (1. - gamma) ** 2, gamma))
+
+    print('N =', N)
+    print()
+
     for domain in ['Deterministic', 'Stochastic']:
         printu(f'{domain} domain')
         set_domain(domain.lower())
@@ -53,7 +60,7 @@ if __name__ == '__main__':
         ## Q
 
         er, tp = mdp()
-        N, q = converge(Q(er, tp), eps)
+        q = Q(er, tp, N)
 
         mu = q.argmax(axis=0)
 
@@ -84,7 +91,7 @@ if __name__ == '__main__':
 
             ### Compute Q^
 
-            _, q_hat = converge(Q(er_hat, tp_hat), eps)
+            q_hat = Q(er_hat, tp_hat, N)
 
             print('||Q - Q^|| =', np.abs(q_hat - q).max())
             print()
