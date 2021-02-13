@@ -25,7 +25,8 @@ Action = Tuple[int, int]  # (i, j)
 Reward = float  # r
 Noise = float  # w
 
-Trajectory = List[Tuple[State, Action, Reward]]  # [..., (x_i, u_i, r_i, x_{i+1}), ...]
+Transition = Tuple[State, Action, Reward, State]  # (x_i, u_i, r_i, x_{i+1})
+Trajectory = List[Transition]
 Policy = Callable[[State], Action]  # mu: X -> U
 
 

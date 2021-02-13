@@ -1,6 +1,25 @@
 #!usr/bin/env python
 
+import matplotlib.pyplot as plt
+
+from matplotlib import rc
+
 from section3 import *
+
+
+# 0. Settings
+
+plt.rcParams['font.size'] = 16
+
+flags = {
+    'transparent': True,
+    'bbox_inches': 'tight'
+}
+
+## /!\ Requires LaTeX
+
+# rc('font', **{'family': ['serif'], 'serif': ['Computer Modern']})
+# rc('text', usetex=True)
 
 
 # 4.a System Identification
@@ -42,6 +61,12 @@ def uniform(x: State) -> Action:
 
 # 4.c Apply
 
+def norm(x: np.array) -> float:
+    '''Infinite norm'''
+
+    return np.abs(x).max()
+
+
 if __name__ == '__main__':
     decimals = 3
     eps = 10 ** -decimals
@@ -75,25 +100,30 @@ if __name__ == '__main__':
 
         ## Q^
 
-        for T in [10 ** i for i in range(6)]:
-            print('T =', T)
+        r_norm = []
+        p_norm = []
+        q_norm = []
 
-            ### Compte trajectory
+        ### Simulate longest trajectory
 
-            h = simulate(uniform, (3, 0), T)
+        T = [10 ** i for i in range(7)]
+        h = simulate(uniform, (3, 0), T[-1])
 
-            ### Compute r^ and p^
+        for t in T:
+            print('T =', t)
 
-            er_hat, tp_hat = si(h)
+            ### Compute r^, p^ and Q^
 
-            print('||r - r^|| =', np.abs(er_hat - er).max())
-            print('||p - p^|| =', np.abs(tp_hat - tp).max())
-
-            ### Compute Q^
-
+            er_hat, tp_hat = si(h[:t])  # truncated trajectory
             q_hat = Q(er_hat, tp_hat, N)
 
-            print('||Q - Q^|| =', np.abs(q_hat - q).max())
+            r_norm.append(norm(er_hat - er))
+            p_norm.append(norm(tp_hat - tp))
+            q_norm.append(norm(q_hat - q))
+
+            print('||r - r^|| =', r_norm[-1])
+            print('||p - p^|| =', p_norm[-1])
+            print('||Q - Q^|| =', q_norm[-1])
             print()
 
             ### Compute mû*
@@ -114,3 +144,23 @@ if __name__ == '__main__':
 
             print('J^mû*_N =', j_hat)
             print()
+
+        ## Plots
+
+        fig = plt.figure(figsize=(6, 4))
+        plt.plot(T, p_norm, '--o')
+        plt.xscale('log')
+        plt.xlabel('Trajectory length')
+        plt.ylabel(r'$\left\| \hat{p} - p \right\|$')
+        plt.grid()
+        plt.savefig(f'{domain.lower()}_p_norm.pdf', **flags)
+        plt.close()
+
+        fig = plt.figure(figsize=(6, 4))
+        plt.plot(T, r_norm, '--o')
+        plt.xscale('log')
+        plt.xlabel('Trajectory length')
+        plt.ylabel(r'$\left\| \hat{r} - r \right\|$')
+        plt.grid()
+        plt.savefig(f'{domain.lower()}_r_norm.pdf', **flags)
+        plt.close()
