@@ -38,6 +38,15 @@ def Q(r: np.array, p: np.array) -> Iterable[np.array]:
         yield q
 
 
+def converge(seq: Iterable[np.array], eps: float) -> Tuple[int, np.array]:
+    for i, curr in enumerate(seq):
+        if i > 0:
+            if np.abs(curr - prev).max() < eps:
+                return i - 1, prev
+
+        prev = curr
+
+
 # 3.c Apply
 
 if __name__ == '__main__':
@@ -52,17 +61,8 @@ if __name__ == '__main__':
 
         er, tp = mdp()
 
-        for i, q1 in enumerate(Q(er, tp)):
-            q1 = q1.round(decimals)
-
-            if i > 0:
-                diff = np.abs(q1 - q0)
-                if np.all(diff < eps):
-                    break
-
-            q0 = q1
-
-        N, q = i - 1, q0
+        N, q = converge(Q(er, tp), eps)
+        q = q.round(decimals)
 
         print('N =', N)
         print('Q_N(u, x) =', q, sep='\n')
