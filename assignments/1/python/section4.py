@@ -73,39 +73,31 @@ if __name__ == '__main__':
     decimals = 3
     eps = 10 ** -decimals
 
-    ## Choose N
-
     N = math.ceil(math.log((eps / (2 * B)) * (1. - gamma) ** 2, gamma))
 
     for domain in ['Deterministic', 'Stochastic']:
         printu(f'{domain} domain')
         set_domain(domain.lower())
 
-        ## Q
+        ## Compute Q, mu* and J^mu*
 
         er, tp = mdp()
         q = Q(er, tp, N)
 
-        mu = q.argmax(axis=0)
+        mu_star = q.argmax(axis=0)
 
-        def mu_star(x: State) -> Action:
-            return U[mu[x]]
+        j = J(policify(mu_star), N)
 
-        j = J(mu_star, N)
-        j = j.round(decimals)
-
-        ## Q^
-
-        r_norm = []
-        p_norm = []
-        q_norm = []
-
-        ### Simulate longest trajectory
+        ## Simulate trajectory
 
         T = [10 ** i for i in range(7)]
         h = simulate(uniform, (3, 0), T[-1], seed=2)
 
-        ### Compute r^, p^ and Q^
+        ## Compute r^, p^ and Q^
+
+        r_norm = []
+        p_norm = []
+        q_norm = []
 
         for t in T:
             er_hat, tp_hat = si(h[:t])  # truncated trajectory
@@ -115,20 +107,16 @@ if __name__ == '__main__':
             p_norm.append(norm(tp_hat - tp))
             q_norm.append(norm(q_hat - q))
 
-        ### Compute mû*
+        ## Compute mû*
 
-        mu_hat = q_hat.argmax(axis=0)
+        mu_hat_star = q_hat.argmax(axis=0)
 
-        print('mû*(x) =', mu_hat, sep='\n')
-        print('with', ', '.join(f'{i}: {u}' for i, u in enumerate(U)))
+        print('mû*(x) =', mu_hat_star, sep='\n')
         print()
 
-        def mu_hat_star(x: State) -> Action:
-            return U[mu_hat[x]]
+        ## Compute J^mû_N
 
-        ### Compute J^mû_N
-
-        j_hat = J(mu_hat_star, N)
+        j_hat = J(policify(mu_hat_star), N)
         j_hat = j_hat.round(decimals)
 
         print('J^mû*_N(x) =', j_hat, sep='\n')

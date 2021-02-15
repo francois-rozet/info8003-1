@@ -38,6 +38,13 @@ def Q(r: np.array, p: np.array, N: int) -> np.array:
     return q
 
 
+def policify(mu: np.array) -> Policy:
+    def f(x: State) -> Action:
+        return U[mu[x]]
+
+    return f
+
+
 # 3.c Apply
 
 if __name__ == '__main__':
@@ -62,24 +69,20 @@ if __name__ == '__main__':
         q = Q(er, tp, N)
         q = q.round(decimals)
 
-        print('N =', N)
         print('Q_N(u, x) =', q, sep='\n')
         print()
 
         ## Compute mu*
 
-        mu = q.argmax(axis=0)
+        mu_star = q.argmax(axis=0)
 
-        print('mu*(x) =', mu, sep='\n')
+        print('mu*(x) =', mu_star, sep='\n')
         print('with', ', '.join(f'{i}: {u}' for i, u in enumerate(U)))
         print()
 
-        def mu_star(x: State) -> Action:
-            return U[mu[x]]
-
         ## Compute J^mu*_N
 
-        j = J(mu_star, N)
+        j = J(policify(mu_star), N)
         j = j.round(decimals)
 
         print('J^mu*_N(x) =', j, sep='\n')
