@@ -81,7 +81,7 @@ def r(x: State, u: Action, w: Noise) -> Reward:
     return R(g, f(x, u, w))
 
 
-def w(x: State, u: Action) -> Noise:
+def noise(x: State, u: Action) -> Noise:
     '''Noise sampler'''
 
     return random.choice(W)
@@ -114,20 +114,28 @@ def clockwise(x: State) -> Action:
         return (0, 1)
 
 
-def simulate(mu: Policy, x0: State, T: int) -> Trajectory:
+def step(x: State, u: Action) -> Transition:
+    '''One-step transition simulator'''
+
+    w = noise(x, u)
+
+    return x, u, r(x, u, w), f(x, u, w)
+
+
+def simulate(mu: Policy, x: State, T: int, seed: int = None) -> Trajectory:
     '''Trajectory simulator'''
+
+    random.seed(seed)
 
     h = []
 
     for t in range(T):
-        u0 = mu(x0)
-        w0 = w(x0, u0)
-        r0 = r(x0, u0, w0)
-        x1 = f(x0, u0, w0)
+        u = mu(x)
 
-        h.append((x0, u0, r0, x1))
+        l = step(x, u)
+        h.append(l)
 
-        x0 = x1
+        x = l[-1]
 
     return h
 
