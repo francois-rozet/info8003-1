@@ -76,16 +76,6 @@ def online(
         yield q
 
 
-def select(x: np.array, arg: np.array, axis: int = 0) -> np.array:
-    '''Select indices in array axis'''
-
-    idx = tuple(np.indices(x.shape[:axis]))
-    idx = idx + (arg,)
-    idx = idx + tuple(np.indices(x.shape[axis+1:]))
-
-    return x[idx]
-
-
 # 5.3 Discount Factor
 
 # gamma = 0.4 in section1.py
@@ -93,12 +83,12 @@ def select(x: np.array, arg: np.array, axis: int = 0) -> np.array:
 
 # 5.4 Q-Learning with Another Exploration Policy
 
-tau = B / (1. - gamma)
+tau = (1. - gamma) / B
 
 def boltzmann(x: State, q: np.array) -> Action:
     '''Boltzmann exploration policy'''
 
-    p = np.exp(q[(...,) + x] / tau)
+    p = np.exp(q[(...,) + x] * tau)
     p /= p.sum()
 
     return U[np.random.choice(len(U), p=p)]
@@ -144,7 +134,7 @@ if __name__ == '__main__':
         plt.plot(T, q_norm, '--o', markersize=5)
         plt.xscale('log')
         plt.xlabel('$t$')
-        plt.ylabel(f'$\\left\\| \\hat{{Q_t}} - Q \\right\\|$')
+        plt.ylabel(f'$\\left\\| \\hat{{Q_t}} - Q \\right\\|_\\infty$')
         plt.grid()
         plt.savefig(f'5.1_{domain.lower()}.pdf', **flags)
         plt.close()
@@ -172,16 +162,29 @@ if __name__ == '__main__':
         }
 
         for key, protocol in protocols.items():
-            j_norm = []
+            temp = []
 
             for q_hat in protocol:
-                j_hat = select(q_hat, mu_star)  # J^(x) = Q^(x, mu*(x))
-                j_norm.append(norm(j_hat - j))
+                mu_hat = q_hat.argmax(axis=0)  # mu^(x)
+                q_mu_hat = q_hat.max(axis=0)  # Q^(x, mu^(x))
+                j_hat = J(policify(mu_hat), N)  #J^mu^_N(x)
+
+                temp.append((
+                    norm(q_mu_hat - j),
+                    j[3, 0],
+                    q_mu_hat[3, 0],
+                    j_hat[3, 0]
+                ))
+
+            temp = list(zip(*temp))
 
             fig = plt.figure(figsize=(6, 4))
-            plt.plot(j_norm)
+            plt.plot(temp[0], label='$\\left\\| \\hat{{Q}} - J^{{\\mu^*}}_N \\right\\|_\\infty$')
+            plt.plot(temp[1], label='$J^{{\\mu^*}}_N(3, 0)$')
+            plt.plot(temp[2], label='$\\hat{{Q}}((3, 0), \\hat{{\\mu}}(3, 0))$')
+            plt.plot(temp[3], label='$J^{{\\hat{{\\mu}}}}_N(3, 0)$')
             plt.xlabel('Episode')
-            plt.ylabel(f'$\\left\\| \\hat{{Q}} - J^{{\\mu^*}}_N \\right\\|$')
             plt.grid()
+            plt.legend(prop={'size': 8})
             plt.savefig(f'{key}_{domain.lower()}.pdf', **flags)
             plt.close()
