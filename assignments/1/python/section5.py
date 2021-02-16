@@ -47,6 +47,7 @@ def online(
     alpha: float = 0.05,
     decay: float = 1.,
     k: int = 0,
+    clear: bool = False
 ) -> Iterable[np.array]:
     '''Online Q-learning protocol'''
 
@@ -60,18 +61,18 @@ def online(
         for t in range(T):
             u = qmu(x, q)
             l = step(x, u)
+            h.append(l)
 
-            if k > 0:
-                h.append(l)
-
-                for l in random.choices(h, k=k):
-                    update(q, l, alpha)
-            else:
+            update(q, l, alpha)
+            for l in random.choices(h, k=k):
                 update(q, l, alpha)
 
             alpha *= decay
 
             x = l[-1]
+
+        if clear:
+            h.clear()
 
         yield q
 
@@ -158,6 +159,7 @@ if __name__ == '__main__':
             '5.2.1': online(greedy, (3, 0)),
             '5.2.2': online(greedy, (3, 0), decay=0.8),
             '5.2.3': online(greedy, (3, 0), k=10),
+            '5.2.3bis': online(greedy, (3, 0), k=10, clear=True),
             '5.4': online(boltzmann, (3, 0))
         }
 
