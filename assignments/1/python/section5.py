@@ -3,7 +3,7 @@
 from section4 import *
 
 
-# 5.1 Offline Q-Learning
+# 5.1 Offline Q-learning
 
 def update(q: np.array, l: Transition, alpha: float) -> None:
     '''In-place Q-learning update'''
@@ -26,7 +26,7 @@ def offline(h: Trajectory, alpha: float = 0.05) -> np.array:
     return q
 
 
-# 5.2 Online Q-Learning
+# 5.2 Online Q-learning
 
 QPolicy = Callable[[State, np.array], Action]
 
@@ -82,7 +82,7 @@ def online(
 # gamma = 0.4 in section1.py
 
 
-# 5.4 Q-Learning with Another Exploration Policy
+# 5.4 Q-learning with Another Exploration Policy
 
 tau = (1. - gamma) / B
 
@@ -134,8 +134,8 @@ if __name__ == '__main__':
         fig = plt.figure(figsize=(6, 4))
         plt.plot(T, q_norm, '--o', markersize=5)
         plt.xscale('log')
-        plt.xlabel('$t$')
-        plt.ylabel(f'$\\left\\| \\hat{{Q_t}} - Q \\right\\|_\\infty$')
+        plt.xlabel('$k$')
+        plt.ylabel(r'$\left\| \hat{Q} - Q_N \right\|_\infty$')
         plt.grid()
         plt.savefig(f'5.1_{domain.lower()}.pdf', **flags)
         plt.close()
@@ -181,10 +181,10 @@ if __name__ == '__main__':
             temp = list(zip(*temp))
 
             fig = plt.figure(figsize=(6, 4))
-            plt.plot(temp[0], label='$\\left\\| \\hat{{Q}} - J^{{\\mu^*}}_N \\right\\|_\\infty$')
-            plt.plot(temp[1], label='$J^{{\\mu^*}}_N(3, 0)$')
-            plt.plot(temp[2], label='$\\hat{{Q}}((3, 0), \\hat{{\\mu}}(3, 0))$')
-            plt.plot(temp[3], label='$J^{{\\hat{{\\mu}}}}_N(3, 0)$')
+            plt.plot(temp[0], label=r'$\left\| \hat{Q} - J^{\mu^*_N}_N \right\|_\infty$')
+            plt.plot(temp[1], label=r'$J^{\mu^*_N}_N(x_0)$')
+            plt.plot(temp[2], label=r'$\hat{Q}(x_0, \hat{\mu}^*(x_0))$')
+            plt.plot(temp[3], label=r'$J^{\hat{\mu}^*}_N(x_0)$')
             plt.xlabel('Episode')
             plt.grid()
             plt.legend(prop={'size': 8})

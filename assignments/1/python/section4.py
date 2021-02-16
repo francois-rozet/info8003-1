@@ -128,7 +128,7 @@ if __name__ == '__main__':
             fig = plt.figure(figsize=(6, 4))
             plt.plot(T, x_norm, '--o', markersize=5)
             plt.xscale('log')
-            plt.xlabel('Trajectory length')
+            plt.xlabel('$t$')
             plt.ylabel(f'$\\left\\| \\hat{{{x}}} - {x} \\right\\|_\\infty$')
             plt.grid()
             plt.savefig(f'4_{x}_{domain.lower()}.pdf', **flags)
