@@ -29,6 +29,10 @@ INTEGRATION_STEP = 1e-3
 
 gamma = 0.95
 
+eps = 1e-2  # precision
+
+B_r = 1  # sup |r|
+
 
 # Functions
 
