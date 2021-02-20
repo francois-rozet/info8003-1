@@ -164,7 +164,12 @@ if __name__ == '__main__':
 
             for key, zz in {'q_-4': qq[..., 0], 'q_+4': qq[..., 1], 'mu': mu}.items():
                 with Plot(f'4_{key}_{generator.__name__}_{method.__name__}.pdf') as plt:
-                    plt.pcolormesh(p, s, zz.T, cmap='coolwarm', vmin=-1, vmax=1)
+                    plt.pcolormesh(
+                        p, s, zz.T,
+                        cmap='coolwarm',
+                        vmin=-1, vmax=1,
+                        rasterized=True
+                    )
                     plt.xlabel(r'$p$')
                     plt.ylabel(r'$s$')
 
