@@ -2,7 +2,7 @@
 
 import math
 
-from itertools import islice
+from itertools import islice, count
 
 from plots import Plot
 from section1 import *

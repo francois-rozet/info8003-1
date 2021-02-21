@@ -48,8 +48,7 @@ class MLP(ass.Sequential):
 
         self.compile(
             optimizer='adam',
-            loss='mse',
-            metrics=['mae']
+            loss='mse'
         )
 
         self.epochs = epochs
@@ -102,7 +101,7 @@ def montecarlo(n: int = 80000, N: int = 1000, seed: int = 0):
 
 # 4.c Fitted-Q-Iteration
 
-def fqi(model, ts: TrainingSet, N: int):
+def fqi(model, ts: TrainingSet, N: int = None, threshold: float = 0.02):
     '''Fitted-Q-Iteration training'''
 
     stateaction, reward, state_prime = ts
@@ -115,13 +114,27 @@ def fqi(model, ts: TrainingSet, N: int):
     terminal = reward != 0
     expected_return = reward
 
-    for _ in range(N):
+    prev_q = None
+
+    for n in (count(1) if N is None else range(1, N + 1)):
+        print(f'N = {n}\r', end='')
+
         model.fit(stateaction, expected_return)
 
         q = model.predict(stateaction_prime)
         max_q = q.reshape(-1, len(U)).max(axis=1)
 
         expected_return = np.where(terminal, reward, gamma * max_q)
+
+        if N is None:
+            if prev_q is not None:
+                mae = np.abs(q - prev_q).mean()
+                if mae < threshold:
+                    break
+
+            prev_q = q
+
+    print('N =', n)
 
 
 ## 4.d Expected return of policy
@@ -141,14 +154,6 @@ def policify(mu: np.array) -> Policy:
 # 4.e Apply
 
 if __name__ == '__main__':
-
-    ## Choose N
-
-    N = math.ceil(math.log((eps / (2 * B_r)) * (1. - gamma), gamma))
-
-    print('N =', N)
-    print()
-
     ## Mesh
 
     p = np.linspace(-1, 1, 200)
@@ -171,42 +176,55 @@ if __name__ == '__main__':
         print('-' * len(generator.__name__))
         print()
 
-        for method in [LR, XRT, MLP]:
-            model = method()
+        for stop in [2, 1]:
 
-            print(method.__name__)
-
-            fqi(model, ts, N)
-
-            ### Compute Q^_N
-
-            qq = model.predict(stateaction).reshape(gridshape)
-
-            ### Compute mû_N
-
-            mu_hat = 2 * qq.argmax(axis=-1) - 1
-
-            ### Plots
-
-            for key, zz in {'q_-4': qq[..., 0], 'q_+4': qq[..., 1], 'mu': mu_hat}.items():
-                with Plot(f'4_{key}_{generator.__name__}_{method.__name__}.pdf') as plt:
-                    plt.pcolormesh(
-                        p, s, zz.T,
-                        cmap='coolwarm_r',
-                        vmin=-1, vmax=1,
-                        rasterized=True
-                    )
-                    plt.xlabel(r'$p$')
-                    plt.ylabel(r'$s$')
-
-                    if 'q' in key:
-                        plt.colorbar()
-
-            ### Compute J^mû_N
-
-            mu_hat *= 4
-            trajectories = samples(policify(mu_hat), N, 50)
-            j_hat = round(expected_return(trajectories, N), decimals)
-
-            print('J^mû_N =', j_hat)
+            print(f'stopping rule {stop}')
+            print('.' * 15)
             print()
+
+            if stop == 1:
+                N = math.ceil(math.log((eps / (2 * B_r)) * (1. - gamma), gamma))
+            elif stop == 2:
+                N = None
+
+            for method in [LR, XRT, MLP]:
+                model = method()
+
+                print(method.__name__)
+
+                fqi(model, ts, N)
+
+                ### Compute Q^_N
+
+                qq = model.predict(stateaction).reshape(gridshape)
+
+                ### Compute mû_N
+
+                mu_hat = 2 * qq.argmax(axis=-1) - 1
+
+                ### Plots
+
+                for key, zz in {'q_-4': qq[..., 0], 'q_+4': qq[..., 1], 'mu': mu_hat}.items():
+                    with Plot(f'4_{generator.__name__}_{stop}_{method.__name__}_{key}.pdf') as plt:
+                        plt.pcolormesh(
+                            p, s, zz.T,
+                            cmap='coolwarm_r',
+                            vmin=-1, vmax=1,
+                            rasterized=True
+                        )
+                        plt.xlabel(r'$p$')
+                        plt.ylabel(r'$s$')
+
+                        if 'q' in key:
+                            plt.colorbar()
+
+                ### Compute J^mû_N'
+
+                N_prime = math.ceil(math.log((eps / B_r), gamma))
+
+                mu_hat *= 4
+                trajectories = samples(policify(mu_hat), N_prime, 50)
+                j_hat = round(expected_return(trajectories, N_prime), decimals)
+
+                print('J^mû_N =', j_hat)
+                print()
