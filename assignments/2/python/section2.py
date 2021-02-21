@@ -14,21 +14,21 @@ def nth(h: Trajectory, N: int) -> Tuple[int, Transition]:
     '''N-th transition or last'''
 
     if type(h) is list:
-        n = min(len(h), N) - 1
-        l = h[n]
+        t = min(len(h), N) - 1
+        l = h[t]
     else:
-        for n, l in zip(range(N), h):
+        for t, l in zip(range(N), h):
             pass
 
-    return n, l
+    return t, l
 
 
 def cumulative_reward(h: Trajectory, N: int) -> Transition:
     '''Cumulative reward after N steps'''
 
-    n, (_, _, r, _) = nth(h, N)
+    t, (_, _, r, _) = nth(h, N)
 
-    return (gamma ** n) * r  # taking advantage of null rewards
+    return (gamma ** t) * r  # taking advantage of null rewards
 
 
 def expected_return(trajectories: List[Trajectory], N: int) -> Reward:
@@ -37,6 +37,20 @@ def expected_return(trajectories: List[Trajectory], N: int) -> Reward:
     total = sum(cumulative_reward(h, N) for h in trajectories)
 
     return total / len(trajectories)
+
+
+def samples(mu: Policy, N: int, n: int = 50, seed: int = 0) -> List[Trajectory]:
+    '''Monte Carlo samples'''
+
+    random.seed(seed)
+
+    trajectories = []
+
+    for _ in range(n):
+        h = list(islice(simulate(mu), N))  # truncated
+        trajectories.append(h)
+
+    return trajectories
 
 
 # 2.b Apply
@@ -53,11 +67,7 @@ if __name__ == '__main__':
 
     ### Simulate 50 trajectories
 
-    trajectories = []
-
-    for _ in range(50):
-        h = list(islice(simulate(stepback), N))  # truncated
-        trajectories.append(h)
+    trajectories = samples(stepback, N, 50)
 
     ### Plot
 

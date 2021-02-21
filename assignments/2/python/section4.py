@@ -1,15 +1,12 @@
 #!usr/bin/env python
 
-import math
 import numpy as np
 import tensorflow.keras as ass
 
-from itertools import islice
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import ExtraTreesRegressor
 
-from plots import Plot
-from section1 import *
+from section2 import *
 
 
 # 4.a Estimators
@@ -59,6 +56,7 @@ class MLP(ass.Sequential):
 
     def fit(self, *args, **kwargs):
         kwargs.setdefault('epochs', self.epochs)
+        kwargs.setdefault('verbose', False)
         super().fit(*args, **kwargs)
 
 
@@ -126,7 +124,21 @@ def fqi(model, ts: TrainingSet, N: int):
         expected_return = np.where(terminal, reward, gamma * max_q)
 
 
-# 4.d Apply
+## 4.d Expected return of policy
+
+def policify(mu: np.array) -> Policy:
+    def f(x: State) -> Action:
+        p, s = x
+        p, s = (p + 1) / 2, (s + 3) / 6
+        i, j = int(p * mu.shape[0]), int(s * mu.shape[1])
+        i, j = min(i, mu.shape[0] - 1), min(j, mu.shape[1] - 1)
+
+        return mu[i, j]
+
+    return f
+
+
+# 4.e Apply
 
 if __name__ == '__main__':
 
@@ -135,6 +147,7 @@ if __name__ == '__main__':
     N = math.ceil(math.log((eps / (2 * B_r)) * (1. - gamma), gamma))
 
     print('N =', N)
+    print()
 
     ## Mesh
 
@@ -154,19 +167,32 @@ if __name__ == '__main__':
     for generator in [exhaustive, montecarlo]:
         ts = training_set(generator())
 
+        print(generator.__name__)
+        print('-' * len(generator.__name__))
+        print()
+
         for method in [LR, XRT, MLP]:
             model = method()
 
+            print(method.__name__)
+
             fqi(model, ts, N)
 
-            qq = model.predict(stateaction).reshape(gridshape)
-            mu = 2 * qq.argmax(axis=-1) - 1
+            ### Compute Q^_N
 
-            for key, zz in {'q_-4': qq[..., 0], 'q_+4': qq[..., 1], 'mu': mu}.items():
+            qq = model.predict(stateaction).reshape(gridshape)
+
+            ### Compute mû_N
+
+            mu_hat = 2 * qq.argmax(axis=-1) - 1
+
+            ### Plots
+
+            for key, zz in {'q_-4': qq[..., 0], 'q_+4': qq[..., 1], 'mu': mu_hat}.items():
                 with Plot(f'4_{key}_{generator.__name__}_{method.__name__}.pdf') as plt:
                     plt.pcolormesh(
                         p, s, zz.T,
-                        cmap='coolwarm',
+                        cmap='coolwarm_r',
                         vmin=-1, vmax=1,
                         rasterized=True
                     )
@@ -175,3 +201,12 @@ if __name__ == '__main__':
 
                     if 'q' in key:
                         plt.colorbar()
+
+            ### Compute J^mû_N
+
+            mu_hat *= 4
+            trajectories = samples(policify(mu_hat), N, 50)
+            j_hat = round(expected_return(trajectories, N), decimals)
+
+            print('J^mû_N =', j_hat)
+            print()
