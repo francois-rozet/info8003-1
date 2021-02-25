@@ -4,7 +4,6 @@ import math
 
 from itertools import islice, count
 
-from plots import Plot
 from section1 import *
 
 
@@ -56,6 +55,7 @@ def samples(mu: Policy, N: int, n: int = 50, seed: int = 0) -> List[Trajectory]:
 # 2.b Apply
 
 if __name__ == '__main__':
+    from plots import plt
 
     ## Choose N
 
@@ -77,7 +77,8 @@ if __name__ == '__main__':
     for n in N:
         J.append(expected_return(trajectories, n))
 
-    with Plot('2_expected_return.pdf') as plt:
-        plt.plot(N, J)
-        plt.xlabel(r'$N$')
-        plt.ylabel(r'$J^\mu_N$')
+    plt.plot(N, J)
+    plt.xlabel(r'$N$')
+    plt.ylabel(r'$J^\mu_N$')
+    plt.savefig('2_expected_return.pdf')
+    plt.close()

@@ -1,10 +1,7 @@
 #!usr/bin/env python
 
 import numpy as np
-import tensorflow.keras as ass
-
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import ExtraTreesRegressor
+import tqdm
 
 from section2 import *
 
@@ -13,50 +10,61 @@ from section2 import *
 
 ## Linear Regression
 
-class LR(LinearRegression):
-    pass
+def LR(**kwargs):
+    from sklearn.linear_model import LinearRegression
+
+    return LinearRegression(**kwargs)
 
 
 ## Extremely Randomized Trees
 
-class XRT(ExtraTreesRegressor):
-    def __init__(self, **kwargs):
-        kwargs.setdefault('n_estimators', 20)
-        super().__init__(**kwargs)
+def XRT(**kwargs):
+    from sklearn.ensemble import ExtraTreesRegressor
+
+    kwargs.setdefault('n_estimators', 20)
+
+    return ExtraTreesRegressor(**kwargs)
 
 
 ## Neural Networks
 
-class MLP(ass.Sequential):
-    def __init__(
-        self,
-        input_size: int = 3,
-        output_size: int = 1,
-        hidden_size: int = 8,
-        n_layers: int = 3,
-        activation: str = 'relu',
-        epochs: int = 5
-    ):
-        super().__init__()
+def KMLP(**kwargs):
+    import tensorflow.keras as ass
 
-        self.add(ass.Input(shape=(input_size,)))
+    class MLP(ass.Sequential):
+        """Keras Multi-Layer Perceptron"""
 
-        for _ in range(n_layers):
-            self.add(ass.layers.Dense(hidden_size, activation=activation))
+        def __init__(
+            self,
+            input_size: int = 3,
+            output_size: int = 1,
+            hidden_size: int = 8,
+            n_layers: int = 3,
+            activation: str = 'relu',
+            epochs: int = 5
+        ):
+            super().__init__()
 
-        self.add(ass.layers.Dense(output_size))
+            self.add(ass.Input(shape=(input_size,)))
 
-        self.compile(
-            optimizer='adam',
-            loss='mse'
-        )
+            for _ in range(n_layers):
+                self.add(ass.layers.Dense(hidden_size, activation=activation))
 
-        self.epochs = epochs
+            self.add(ass.layers.Dense(output_size))
 
-    def fit(self, *args, **kwargs):
-        kwargs.setdefault('epochs', self.epochs)
-        kwargs.setdefault('verbose', False)
-        super().fit(*args, **kwargs)
+            self.compile(
+                optimizer='adam',
+                loss='mse'
+            )
+
+            self.epochs = epochs
+
+        def fit(self, *args, **kwargs):
+            kwargs.setdefault('epochs', self.epochs)
+            kwargs.setdefault('verbose', False)
+            super().fit(*args, **kwargs)
+
+    return MLP(**kwargs)
 
 
 # 4.b Generation of the training-set
@@ -116,9 +124,7 @@ def fqi(model, ts: TrainingSet, N: int = None, threshold: float = 0.02):
 
     prev_q = None
 
-    for n in (count(1) if N is None else range(1, N + 1)):
-        print(f'N = {n}\r', end='')
-
+    for _ in tqdm.tqdm(count(1) if N is None else range(1, N + 1)):
         model.fit(stateaction, expected_return)
 
         q = model.predict(stateaction_prime)
@@ -134,12 +140,12 @@ def fqi(model, ts: TrainingSet, N: int = None, threshold: float = 0.02):
 
             prev_q = q
 
-    print('N =', n)
-
 
 ## 4.d Expected return of policy
 
 def policify(mu: np.array) -> Policy:
+    mu *= 4
+
     def f(x: State) -> Action:
         p, s = x
         p, s = (p + 1) / 2, (s + 3) / 6
@@ -154,6 +160,8 @@ def policify(mu: np.array) -> Policy:
 # 4.e Apply
 
 if __name__ == '__main__':
+    from plots import plt
+
     ## Mesh
 
     p = np.linspace(-1, 1, 200)
@@ -187,7 +195,7 @@ if __name__ == '__main__':
             elif stop == 2:
                 N = None
 
-            for method in [LR, XRT, MLP]:
+            for method in [LR, XRT, KMLP]:
                 model = method()
 
                 print(method.__name__)
@@ -205,26 +213,28 @@ if __name__ == '__main__':
                 ### Plots
 
                 for key, zz in {'q_-4': qq[..., 0], 'q_+4': qq[..., 1], 'mu': mu_hat}.items():
-                    with Plot(f'4_{generator.__name__}_{stop}_{method.__name__}_{key}.pdf') as plt:
-                        plt.pcolormesh(
-                            p, s, zz.T,
-                            cmap='coolwarm_r',
-                            vmin=-1, vmax=1,
-                            rasterized=True
-                        )
-                        plt.xlabel(r'$p$')
-                        plt.ylabel(r'$s$')
 
-                        if 'q' in key:
-                            plt.colorbar()
+                    plt.pcolormesh(
+                        p, s, zz.T,
+                        cmap='coolwarm_r',
+                        vmin=-1, vmax=1,
+                        rasterized=True
+                    )
+                    plt.xlabel(r'$p$')
+                    plt.ylabel(r'$s$')
+
+                    if 'q' in key:
+                        plt.colorbar()
+
+                    plt.savefig(f'4_{generator.__name__}_{stop}_{method.__name__}_{key}.pdf')
+                    plt.close()
 
                 ### Compute J^mû_N'
 
                 N_prime = math.ceil(math.log((eps / B_r), gamma))
 
-                mu_hat *= 4
-                trajectories = samples(policify(mu_hat), N_prime, 50)
-                j_hat = round(expected_return(trajectories, N_prime), decimals)
+                trajectories = samples(policify(mu_hat), N_prime)
+                j_hat = expected_return(trajectories, N_prime)
 
                 print('J^mû_N =', j_hat)
                 print()

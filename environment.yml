@@ -1,9 +1,11 @@
 name: optimal
 channels:
+  - pytorch
   - defaults
 dependencies:
   - pip=20.3.3
   - python=3.7.9
+  - pytorch=1.7.1
   - pip:
     - imageio==2.9.0
     - matplotlib==3.3.4
@@ -11,3 +13,4 @@ dependencies:
     - pygame==2.0.1
     - scikit-learn==0.24.1
     - tensorflow==2.4.1
+    - tqdm==4.58.0
