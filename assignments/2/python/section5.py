@@ -35,54 +35,78 @@ class MLP(nn.Sequential):
 
 # 5.b Parametric Q-learning
 
-class TorchTS(data.Dataset):
-    def __init__(self, ts: TrainingSet):
-        stateaction, reward, state_prime = (torch.tensor(x).float() for x in ts)
+def ts_loader(ts: TrainingSet, batch_size: int = 1024) -> data.DataLoader:
+    '''Traning set loader'''
 
-        self.stateaction, self.reward = stateaction, reward
-        self.stateaction_prime = torch.cat([  # all combinations of x' and u'
-            state_prime.unsqueeze(1).expand(-1, len(U), -1),
-            torch.tensor(U).expand(len(state_prime), -1).unsqueeze(-1)
-        ], dim=-1)
+    class TSDataset(data.Dataset):
+        def __init__(self, ts: TrainingSet):
+            stateaction, reward, state_prime = (torch.tensor(x).float() for x in ts)
 
-    def __len__(self) -> int:
-        return len(self.stateaction)
+            self.stateaction, self.reward = stateaction, reward
+            self.stateaction_prime = torch.cat([  # all combinations of x' and u'
+                state_prime.unsqueeze(1).expand(-1, len(U), -1),
+                torch.tensor(U).expand(len(state_prime), -1).unsqueeze(-1)
+            ], dim=-1)
 
-    def __getitem__(self, i: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        return self.stateaction[i], self.reward[i], self.stateaction_prime[i]
+        def __len__(self) -> int:
+            return len(self.stateaction)
 
+        def __getitem__(self, i: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            return self.stateaction[i], self.reward[i], self.stateaction_prime[i]
 
-def pql(model: nn.Module, ts: TrainingSet, epochs: int, batch_size: int = 2048):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    model.to(device)
-
-    dataset = TorchTS(ts)
+    dataset = TSDataset(ts)
     loader = data.DataLoader(
         dataset,
         batch_size=None,
         sampler=data.BatchSampler(data.RandomSampler(dataset), batch_size, False),
-        pin_memory=device == 'cuda'
+        pin_memory=torch.cuda.is_available()
     )
 
+    return loader
+
+
+def dql_epoch(model: nn.Module, goal: nn.Module, loader: data.DataLoader, optimizer: optim.Optimizer):
+    '''Double Q-learning epoch'''
+
+    for xu, r, xu_prime in loader:
+        xu = xu.to(device)
+        q = model(xu).view(-1)
+
+        with torch.no_grad():
+            r, xu_prime = r.to(device), xu_prime.to(device)
+
+            max_q = goal(xu_prime).max(dim=1)[0].view(-1)
+            target = torch.where(r != 0, r, gamma * max_q)
+
+        loss = F.mse_loss(q, target)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+
+def pql(model: nn.Module, ts: TrainingSet, epochs: int):
+    '''Parametric Q-learning training'''
+
+    loader = ts_loader(ts)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     for _ in tqdm.tqdm(range(epochs)):
-        for xu, r, xu_prime in loader:
-            xu = xu.to(device)
-            q = model(xu).view(-1)
+        dql_epoch(model, model, loader, optimizer)
 
-            with torch.no_grad():
-                r, xu_prime = r.to(device), xu_prime.to(device)
 
-                max_q = model(xu_prime).max(dim=1)[0].view(-1)
-                target = torch.where(r != 0, r, gamma * max_q)
+def dql(model: nn.Module, ts: TrainingSet, epochs: int, passes: int = 5):
+    '''Double Q-learning training'''
 
-            loss = F.mse_loss(q, target)
+    loader = ts_loader(ts)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+    for _ in tqdm.tqdm(range(epochs)):
+        goal = model.__class__().to(device)
+        goal.load_state_dict(model.state_dict())
+
+        for _ in range(passes):
+            dql_epoch(model, goal, loader, optimizer)
 
 
 ## BONUS: Normalized Gradients
@@ -148,25 +172,31 @@ if __name__ == '__main__':
 
     ## Trainings
 
-    js = {'fqi': [], 'pql': []}
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'  # global
+
+    js = {'FQI': [], 'PQL': [], 'DQL': []}
     n = []
 
     for steps in [25, 50, 100, 150, 200]:
         ts = training_set(exhaustive(steps))
         n.append(len(ts[0]))
 
-        for routine in [fqi, pql]:
-            if routine.__name__ == 'fqi':
+        for key, routine in {'FQI': fqi, 'PQL': pql, 'DQL': dql}.items():
+            if key == 'FQI':
                 model = KMLP()
                 fqi(model, ts, N)
 
                 ### Compute Q^_N
 
                 qq = model.predict(stateaction)
+            else:
+                model = MLP().to(device)
 
-            else:  # routine.__name__ == 'pql'
-                model = MLP()
-                pql(model, ts, N * 5)
+                if key == 'PQL':
+                    pql(model, ts, N * 5)
+                else:  # key == 'DQL'
+                    dql(model, ts, N, 5)
+
                 model.cpu().eval()
 
                 ### Compute Q^
@@ -184,7 +214,7 @@ if __name__ == '__main__':
             trajectories = samples(policify(mu_hat), N_prime)
             j_hat = expected_return(trajectories, N_prime)
 
-            js[routine.__name__].append(j_hat)
+            js[key].append(j_hat)
 
     for key, val in js.items():
         if val:
