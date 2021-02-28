@@ -35,8 +35,8 @@ class MLP(nn.Sequential):
 
 # 5.b Parametric Q-learning
 
-def ts_loader(ts: TrainingSet, batch_size: int = 1024) -> data.DataLoader:
-    '''Traning set loader'''
+def ts_loader(ts: TrainingSet, batch_size: int = 256) -> data.DataLoader:
+    '''Training set loader'''
 
     class TSDataset(data.Dataset):
         def __init__(self, ts: TrainingSet):
@@ -65,7 +65,13 @@ def ts_loader(ts: TrainingSet, batch_size: int = 1024) -> data.DataLoader:
     return loader
 
 
-def dql_epoch(model: nn.Module, goal: nn.Module, loader: data.DataLoader, optimizer: optim.Optimizer):
+def dql_epoch(
+    model: nn.Module,
+    goal: nn.Module,
+    loader: data.DataLoader,
+    optimizer: optim.Optimizer,
+    normed: bool = False
+):
     '''Double Q-learning epoch'''
 
     for xu, r, xu_prime in loader:
@@ -77,76 +83,54 @@ def dql_epoch(model: nn.Module, goal: nn.Module, loader: data.DataLoader, optimi
 
             max_q = goal(xu_prime).max(dim=1)[0].view(-1)
             target = torch.where(r != 0, r, gamma * max_q)
-
-        loss = F.mse_loss(q, target)
+            delta = q - target
 
         optimizer.zero_grad()
-        loss.backward()
+
+        if normed:
+            ## Gradient of Q
+            q.mean().backward()
+
+            ## Gradient norm
+            norm = torch.norm(torch.stack([
+                torch.norm(p.grad, 2.)
+                for p in model.parameters()
+            ]), 2.)
+
+            ## Normalize w.r.t. delta
+            delta = delta.mean()
+
+            for p in model.parameters():
+                p.grad *= delta / (norm + 1e-6)
+        else:
+            loss = F.mse_loss(q, target)
+            loss.backward()
+
         optimizer.step()
 
 
-def pql(model: nn.Module, ts: TrainingSet, epochs: int):
+def pql(model: nn.Module, ts: TrainingSet, epochs: int, normed: bool = False):
     '''Parametric Q-learning training'''
 
     loader = ts_loader(ts)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     for _ in tqdm.tqdm(range(epochs)):
-        dql_epoch(model, model, loader, optimizer)
+        dql_epoch(model, model, loader, optimizer, normed)
 
 
-def dql(model: nn.Module, ts: TrainingSet, epochs: int, passes: int = 5):
+def dql(model: nn.Module, ts: TrainingSet, epochs: Tuple[int, int], normed: bool = False):
     '''Double Q-learning training'''
 
     loader = ts_loader(ts)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    for _ in tqdm.tqdm(range(epochs)):
+    for _ in tqdm.tqdm(range(epochs[0])):
         goal = model.__class__().to(device)
         goal.load_state_dict(model.state_dict())
 
-        for _ in range(passes):
-            dql_epoch(model, goal, loader, optimizer)
-
-
-## BONUS: Normalized Gradients
-
-def norm_grad_(parameters: Iterable[torch.Tensor], norm: float = 1., norm_type: float = 2.) -> torch.Tensor:
-    r"""Normalize gradient of an iterable of parameters.
-
-    The norm is computed over all gradients together, as if they were
-    concatenated into a single vector. Gradients are modified in-place.
-
-    Args:
-        parameters (Iterable[Tensor] or Tensor): an iterable of Tensors or a
-            single Tensor that will have gradients normalized
-        norm (float or int): new norm of the gradients
-        norm_type (float or int): type of the used p-norm.
-
-    Returns:
-        Total norm of the parameters (viewed as a single vector).
-
-    References:
-        https://pytorch.org/docs/stable/_modules/torch/nn/utils/clip_grad.html#clip_grad_norm_
-    """
-
-    parameters = [p for p in parameters if p.grad is not None]
-
-    if len(parameters) == 0:
-        return torch.tensor(0.)
-
-    device = parameters[0].grad.device
-
-    total_norm = torch.norm(torch.stack([
-        torch.norm(p.grad.detach(), norm_type).to(device)
-        for p in parameters
-    ]), norm_type)
-
-    coef = norm / (total_norm + 1e-6)
-    for p in parameters:
-        p.grad.detach().mul_(coef.to(p.grad.device))
-
-    return total_norm
+        for _ in range(epochs[1]):
+            dql_epoch(model, goal, loader, optimizer, normed)
 
 
 # 5.c Apply
@@ -195,7 +179,7 @@ if __name__ == '__main__':
                 if key == 'PQL':
                     pql(model, ts, N * 5)
                 else:  # key == 'DQL'
-                    dql(model, ts, N, 5)
+                    dql(model, ts, (N, 5))
 
                 model.cpu().eval()
 
