@@ -41,6 +41,7 @@ def KMLP(**kwargs):
             hidden_size: int = 8,
             n_layers: int = 3,
             activation: str = 'relu',
+            batch_size: int = 256,
             epochs: int = 5
         ):
             super().__init__()
@@ -57,9 +58,11 @@ def KMLP(**kwargs):
                 loss='mse'
             )
 
+            self.batch_size = batch_size
             self.epochs = epochs
 
         def fit(self, *args, **kwargs):
+            kwargs.setdefault('batch_size', self.batch_size)
             kwargs.setdefault('epochs', self.epochs)
             kwargs.setdefault('verbose', False)
             super().fit(*args, **kwargs)
