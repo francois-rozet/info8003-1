@@ -106,26 +106,21 @@ def ql_epoch(
             target = torch.where(r != 0, r, gamma * max_q)
             delta = q - target
 
+        loss = (delta * q).mean()
+
         optimizer.zero_grad()
+        loss.backward()
 
         if normed:
-            ## Gradient of Q
-            q.mean().backward()
-
             ## Gradient norm
             norm = torch.norm(torch.stack([
                 torch.norm(p.grad, 2.)
                 for p in model.parameters()
             ]), 2.)
 
-            ## Normalize w.r.t. delta
-            delta = delta.mean()
-
+            ## Normalize
             for p in model.parameters():
-                p.grad *= delta / (norm + 1e-6)
-        else:
-            loss = F.mse_loss(q, target)
-            loss.backward()
+                p.grad /= norm + 1e-6
 
         optimizer.step()
 
