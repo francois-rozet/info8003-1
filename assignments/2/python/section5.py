@@ -193,6 +193,19 @@ if __name__ == '__main__':
             qq = qq.reshape(gridshape)
             mu_hat = 2 * qq.argmax(axis=-1) - 1
 
+            if steps == 200:
+                plt.pcolormesh(
+                    p, s, mu_hat.T,
+                    cmap='coolwarm_r',
+                    vmin=-1, vmax=1,
+                    rasterized=True
+                )
+                plt.xlabel(r'$p$')
+                plt.ylabel(r'$s$')
+
+                plt.savefig(f'5_mu_{key}.pdf')
+                plt.close()
+
             ### Compute J^mû_N'
 
             trajectories = samples(policify(mu_hat), N_prime)
