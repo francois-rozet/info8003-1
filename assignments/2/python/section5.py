@@ -65,14 +65,35 @@ def ts_loader(ts: TrainingSet, batch_size: int = 256) -> data.DataLoader:
     return loader
 
 
-def dql_epoch(
+def ql_init(
+    model: nn.Module,
+    loader: data.DataLoader,
+    optimizer: optim.Optimizer
+):
+    '''Q-learning initialization (to 0)'''
+
+    for xu, _, xu_prime in loader:
+        xu = xu.to(device)
+
+        q = model(xu).view(-1)
+        l1 = F.mse_loss(q, torch.zeros_like(q))
+
+        q = model(xu_prime).view(-1)
+        l2 = F.mse_loss(q, torch.zeros_like(q))
+
+        optimizer.zero_grad()
+        (l1 + l2).backward()
+        optimizer.step()
+
+
+def ql_epoch(
     model: nn.Module,
     goal: nn.Module,
     loader: data.DataLoader,
     optimizer: optim.Optimizer,
     normed: bool = False
 ):
-    '''Double Q-learning epoch'''
+    '''Q-learning epoch'''
 
     for xu, r, xu_prime in loader:
         xu = xu.to(device)
@@ -115,8 +136,10 @@ def pql(model: nn.Module, ts: TrainingSet, epochs: int, normed: bool = False):
     loader = ts_loader(ts)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
+    ql_init(model, loader, optimizer)
+
     for _ in tqdm.tqdm(range(epochs)):
-        dql_epoch(model, model, loader, optimizer, normed)
+        ql_epoch(model, model, loader, optimizer, normed)
 
 
 def dql(model: nn.Module, ts: TrainingSet, epochs: Tuple[int, int], normed: bool = False):
@@ -125,12 +148,14 @@ def dql(model: nn.Module, ts: TrainingSet, epochs: Tuple[int, int], normed: bool
     loader = ts_loader(ts)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
+    ql_init(model, loader, optimizer)
+
     for _ in tqdm.tqdm(range(epochs[0])):
         goal = model.__class__().to(device)
         goal.load_state_dict(model.state_dict())
 
         for _ in range(epochs[1]):
-            dql_epoch(model, goal, loader, optimizer, normed)
+            ql_epoch(model, goal, loader, optimizer, normed)
 
 
 # 5.c Apply
