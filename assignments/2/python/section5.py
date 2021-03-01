@@ -58,8 +58,7 @@ def ts_loader(ts: TrainingSet, batch_size: int = 256) -> data.DataLoader:
     loader = data.DataLoader(
         dataset,
         batch_size=None,
-        sampler=data.BatchSampler(data.RandomSampler(dataset), batch_size, False),
-        pin_memory=torch.cuda.is_available()
+        sampler=data.BatchSampler(data.RandomSampler(dataset), batch_size, False)
     )
 
     return loader
@@ -73,8 +72,6 @@ def ql_init(
     '''Q-learning initialization (to 0)'''
 
     for xu, _, xu_prime in loader:
-        xu = xu.to(device)
-
         q = model(xu).view(-1)
         l1 = F.mse_loss(q, torch.zeros_like(q))
 
@@ -96,12 +93,9 @@ def ql_epoch(
     '''Q-learning epoch'''
 
     for xu, r, xu_prime in loader:
-        xu = xu.to(device)
         q = model(xu).view(-1)
 
         with torch.no_grad():
-            r, xu_prime = r.to(device), xu_prime.to(device)
-
             max_q = goal(xu_prime).max(dim=1)[0].view(-1)
             target = torch.where(r != 0, r, gamma * max_q)
             delta = q - target
@@ -146,7 +140,7 @@ def dql(model: nn.Module, ts: TrainingSet, epochs: Tuple[int, int], normed: bool
     ql_init(model, loader, optimizer)
 
     for _ in tqdm.tqdm(range(epochs[0])):
-        goal = model.__class__().to(device)
+        goal = model.__class__()
         goal.load_state_dict(model.state_dict())
 
         for _ in range(epochs[1]):
@@ -176,8 +170,6 @@ if __name__ == '__main__':
 
     ## Trainings
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'  # global
-
     js = {'FQI': [], 'PQL': [], 'DQL': []}
     n = []
 
@@ -194,14 +186,16 @@ if __name__ == '__main__':
 
                 qq = model.predict(stateaction)
             else:
-                model = MLP().to(device)
+                torch.manual_seed(42)
+
+                model = MLP()
 
                 if key == 'PQL':
                     pql(model, ts, N * 5)
                 else:  # key == 'DQL'
                     dql(model, ts, (N, 5))
 
-                model.cpu().eval()
+                model.eval()
 
                 ### Compute Q^
 
