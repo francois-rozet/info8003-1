@@ -29,6 +29,7 @@ def XRT(**kwargs):
 ## Neural Networks
 
 def KMLP(**kwargs):
+    import tensorflow as tf
     import tensorflow.keras as ass
 
     class MLP(ass.Sequential):
@@ -41,10 +42,14 @@ def KMLP(**kwargs):
             hidden_size: int = 8,
             n_layers: int = 3,
             activation: str = 'relu',
-            batch_size: int = 256,
-            epochs: int = 5
+            batch_size: int = 32,
+            epochs: int = 5,
+            seed: int = 0
         ):
             super().__init__()
+
+            np.random.seed(seed)
+            tf.random.set_seed(seed)
 
             self.add(ass.Input(shape=(input_size,)))
 
@@ -187,7 +192,7 @@ if __name__ == '__main__':
         print('-' * len(generator.__name__))
         print()
 
-        for stop in [2, 1]:
+        for stop in [1, 2]:
 
             print(f'stopping rule {stop}')
             print('.' * 15)

@@ -20,8 +20,11 @@ class MLP(nn.Sequential):
         output_size: int = 1,
         hidden_size: int = 8,
         n_layers: int = 3,
-        activation: nn.Module = nn.ReLU
+        activation: nn.Module = nn.ReLU,
+        seed: int = 0
     ):
+        torch.manual_seed(seed)
+
         layers = [nn.Linear(input_size, hidden_size), activation()]
 
         for _ in range(n_layers):
@@ -35,7 +38,7 @@ class MLP(nn.Sequential):
 
 # 5.b Parametric Q-learning
 
-def ts_loader(ts: TrainingSet, batch_size: int = 256) -> data.DataLoader:
+def ts_loader(ts: TrainingSet, batch_size: int = 32) -> data.DataLoader:
     '''Training set loader'''
 
     class TSDataset(data.Dataset):
@@ -170,12 +173,11 @@ if __name__ == '__main__':
 
     ## Trainings
 
+    transitions = [1000, 5000, 10000, 50000, 100000]
     js = {'FQI': [], 'PQL': [], 'DQL': []}
-    n = []
 
-    for steps in [25, 50, 100, 150, 200]:
-        ts = training_set(exhaustive(steps))
-        n.append(len(ts[0]))
+    for n in transitions:
+        ts = training_set(montecarlo(n))
 
         for key, routine in {'FQI': fqi, 'PQL': pql, 'DQL': dql}.items():
             if key == 'FQI':
@@ -186,8 +188,6 @@ if __name__ == '__main__':
 
                 qq = model.predict(stateaction)
             else:
-                torch.manual_seed(42)
-
                 model = MLP()
 
                 if key == 'PQL':
@@ -207,7 +207,7 @@ if __name__ == '__main__':
             qq = qq.reshape(gridshape)
             mu_hat = 2 * qq.argmax(axis=-1) - 1
 
-            if steps == 200:
+            if n == transitions[-1]:
                 plt.pcolormesh(
                     p, s, mu_hat.T,
                     cmap='coolwarm_r',
@@ -225,14 +225,16 @@ if __name__ == '__main__':
             trajectories = samples(policify(mu_hat), N_prime)
             j_hat = expected_return(trajectories, N_prime)
 
+            print('J^mû_N =', j_hat)
+
             js[key].append(j_hat)
 
     for key, val in js.items():
         if val:
-            plt.plot(n, val, label=key)
+            plt.plot(transitions, val, label=key)
 
     plt.xlabel(r'$n$')
-    plt.ylabel(r'$J^\hat{\mu}_N$')
+    plt.ylabel(r"$J^{\hat{\mu}}_{N'}$")
     plt.legend()
     plt.savefig('5_comparison.pdf')
     plt.close()
