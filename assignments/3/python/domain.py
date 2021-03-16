@@ -90,11 +90,11 @@ def reward(x: State, u: Action) -> Tuple[Reward, State]:
     p, s = dynamics(x, u)
 
     if p < -1 or abs(s) > 3:
-        r = -1
+        r = -1.
     elif p > 1:
-        r = 1
+        r = 1.
     else:
-        r = 0
+        r = 0.
 
     return r, (p, s)
 

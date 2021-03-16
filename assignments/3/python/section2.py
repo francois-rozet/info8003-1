@@ -1,11 +1,12 @@
 #!usr/bin/env python
 
 import numpy as np
-import random
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from typing import Iterable, Tuple
+from torchvision.transforms.functional import to_tensor
+from tqdm import tqdm
 
 from display import *
 from domain import *
@@ -13,24 +14,49 @@ from domain import *
 
 # Types
 
-VisualState = torch.Tensor
+VisualState = torch.Tensor  # (3, 100, 100)
 VisualTransition = Tuple[VisualState, Action, Reward, VisualState]
 
-Batch = Iterable[torch.Tensor]
+Batch = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 
 
-# Globals
+# Functions
 
-memory_size = 10000
+def state2visual(x: State, factor: int = 4) -> VisualState:
+    '''Transforms a state in an image'''
 
-eps_start = 0.9
-eps_end = 0.05
-eps_decay = 200
+    img = surf2img(draw(*x))
+    img = to_tensor(img)
+    img = F.avg_pool2d(img, factor)
 
-num_episodes = 50
-batch_size = 128
+    return img
 
-target_update = 10
+
+## Epsilon-greedy policy
+
+def eps(
+    step: int,
+    start: float = 0.95,
+    end: float = 0.05,
+    decay: int = 25
+) -> float:
+    '''Compute the value of epsilon used in epsilon-greedy policy'''
+
+    return end + (start - end) * np.exp(-step / decay)
+
+
+def greedy(
+    eps: float,
+    model: nn.Module,
+    state: VisualState
+) -> Action:
+    '''Select an action according to an epsilon-greedy policy'''
+
+    if random.random() > eps:
+        with torch.no_grad():
+            return model(state.unsqueeze(0)).argmax().item()
+    else:
+        return random.randrange(2)
 
 
 # Classes
@@ -38,52 +64,41 @@ target_update = 10
 ## Replay buffer
 
 class ReplayBuffer:
-    '''Cyclic buffer of bounded size.'''
+    '''Cyclic buffer of bounded capacity'''
 
-    def __init__(self, capacity: int = 1000):
+    def __init__(self, capacity: int = 2 ** 12, batch_size: int = 128):
         self.capacity = capacity
+        self.batch_size = batch_size
         self.memory = []
         self.idx = 0
 
-    def push(self, transition: VisualTransition):
+    def __len__(self) -> int:
+        return len(self.memory)
+
+    def is_ready(self) -> bool:
+        return len(self) >= self.batch_size
+
+    def push(self, transition: VisualTransition) -> None:
         if len(self.memory) < self.capacity:
             self.memory.append(None)
 
         self.memory[self.idx] = transition
         self.idx = (self.idx + 1) % self.capacity
 
-    def sample(self, batch_size: int = 128) -> Tuple[Batch]:
-        choices = random.sample(self.memory, batch_size)
-        x, u, r, x_prime = [], [], [], []
+    def sample(self) -> Batch:
+        choices = random.sample(self.memory, self.batch_size)
+        x, u, r, y = tuple(zip(*choices))  # y is x'
 
-        for choice in choices:
-            x.append(choice[0])
-            u.append(torch.tensor([choice[1]], dtype=torch.long))
-            r.append(torch.tensor([choice[2]]))
-            x_prime.append(choice[3])
+        x, y = torch.stack(x), torch.stack(y)
+        u, r = torch.tensor(u), torch.tensor(r)
 
-        mask = torch.tensor(
-            tuple(map(lambda x: x is not None, x_prime)),
-            device=device,
-            dtype=torch.bool
-        )
-
-        filtered = [x for x in x_prime if x is not None]
-
-        x, u = torch.stack(x), torch.stack(u)
-        r = torch.cat(tuple(r))
-        filtered = torch.stack(filtered)
-
-        return x, u, r, mask, filtered
-
-    def __len__(self) -> int:
-        return len(self.memory)
+        return x, u, r, y
 
 
 ## Neural network
 
 class Conv(nn.Sequential):
-    '''Generic convolution layer.'''
+    '''Generic 2D convolution layer'''
 
     def __init__(
         self,
@@ -91,7 +106,7 @@ class Conv(nn.Sequential):
         out_channels: int,
         kernel_size: int = 5,
         stride: int = 2,
-        padding: int = 0
+        padding: int = 2
     ):
         super().__init__(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
@@ -100,184 +115,126 @@ class Conv(nn.Sequential):
         )
 
 
-class DQN(nn.Module):
-    '''Deep Q-network.'''
+class MLP(nn.Sequential):
+    '''Multi-Layer Perceptron'''
 
-    def __init__(self, output_size: int = 2):
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        hidden_size: int = 8,
+        n_layers: int = 3
+    ):
+        layers = [
+            nn.Flatten(),
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(inplace=True)
+        ]
+
+        for _ in range(n_layers):
+            layers.append(nn.Linear(hidden_size, hidden_size))
+            layers.append(nn.ReLU(inplace=True))
+
+        layers.append(nn.Linear(hidden_size, output_size))
+
+        super().__init__(*layers)
+
+
+class DQN(nn.Module):
+    '''Deep Q-Network'''
+
+    def __init__(self, output_size: int = 2, **kwargs):
         super().__init__()
 
         self.conv1 = Conv(3, 16)
         self.conv2 = Conv(16, 32)
         self.conv3 = Conv(32, 32)
 
-        self.last = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(2592, output_size)
-        )
+        self.last = MLP(32 * 13 ** 2, output_size, **kwargs)
 
     def forward(self, x: Batch) -> Batch:
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
 
-        x = self.last(x)
-
-        return x
-
-
-# Functions
-
-## Epsilon-greedy policy
-
-def eps(step: int) -> float:
-    '''Compute the value of epsilon used in epsilon-greedy policy.'''
-
-    eps = eps_end + (eps_start - eps_end)
-    eps *= np.exp(-1. * step / eps_decay)
-
-    return eps
-
-
-def greedy(
-    eps: float,
-    model: nn.Module,
-    state: torch.Tensor
-) -> Action:
-    '''Select an action according to an epsilon-greedy policy.'''
-
-    if np.random.uniform() > eps:
-        with torch.no_grad():
-            return model(state).max(1)[1].view(1, 1).item()
-    else:
-        return np.random.randint(2)
-
-
-## Training
-
-def train_epoch(
-    memory: ReplayBuffer,
-    model: nn.Module,
-    device: torch.device,
-    goal: nn.Module,
-    criterion: nn.Module,
-    optimizer: torch.optim.Optimizer
-):
-    '''Train network for one epoch.'''
-
-    if len(memory) < batch_size:
-        return
-
-    # Sample batches
-    x, u, r, mask, x_prime = memory.sample(batch_size)
-
-    x, u, r = x.to(device), u.to(device), r.to(device)
-    mask, x_prime = mask.to(device), x_prime.to(device)
-
-    # Compute Q(state, action)
-    xu = model(x).gather(1, u)
-
-    # Compute V(state_{t+1}) for all next states
-    vx = torch.zeros(batch_size, device=device)
-
-    with torch.no_grad():
-        vx[mask] = goal(x_prime).max(1)[0]
-
-    # Compute expected Q values
-    target = (vx * gamma) + r
-    target = target.unsqueeze(1)
-
-    # Optimize
-    loss = criterion(xu, target)
-
-    optimizer.zero_grad()
-    loss.backward()
-
-    for param in model.parameters():
-        param.grad.data.clamp_(0, 1)
-
-    optimizer.step()
+        return self.last(x)
 
 
 # Main
 
+def optimize():
+    # Batch
+
+    x, u, r, y = buff.sample()
+    x, u, r, y = (
+        x.to(device),
+        u.to(device),
+        r.to(device),
+        y.to(device)
+    )
+
+    # Compute Q(x, u)
+
+    q = model(x).gather(1, u.view(-1, 1)).squeeze(1)
+
+    # Compute max_u' Q(x', u')
+
+    with torch.no_grad():
+        q_max = goal(y).max(1)[0]
+        target = torch.where(r != 0, r, gamma * q_max)
+
+    # Optimize
+
+    loss = criterion(q, target)
+
+    optimizer.zero_grad()
+    loss.backward()
+    nn.utils.clip_grad_norm_(model.parameters(), 1.)
+    optimizer.step()
+
+
 if __name__ == '__main__':
-    import torchvision.transforms as transforms
-
-    from itertools import count
-    from tqdm import tqdm
-
-    # Transformation
-
-    to_tensor = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize(100),
-        transforms.ToTensor()
-    ])
-
-    ## Replay buffer
-
-    memory = ReplayBuffer(memory_size)
-
-    ## Networks
+    # Device
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.benchmark = True
 
-    model, goal = DQN(len(U)).to(device), DQN(len(U)).to(device)
+    # Setup
 
-    goal.load_state_dict(model.state_dict())
-    goal.eval()
+    buff = ReplayBuffer()
+    model = DQN().to(device)
+    goal = DQN().to(device)
 
-    ## Optimization
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    criterion = nn.SmoothL1Loss()
-    optimizer = torch.optim.RMSprop(model.parameters())
+    # Online Double Q-learning
 
-    ## Training
+    for epoch in tqdm(range(100)):  # epochs
+        goal.load_state_dict(model.state_dict())
+        goal.eval()
 
-    step = 0
+        for _ in range(5):  # trajectories
+            r, x = 0, initial()
+            state = state2visual(x)
 
-    with PyGameDisplay():
-        for idx in tqdm(range(num_episodes)):
+            while r == 0:
+                ## Take action
 
-            ## Reset environment
+                u = greedy(eps(epoch), model, state.to(device))
+                _, _, r, x_prime = onestep(x, u)
+                state_prime = state2visual(x_prime)
 
-            p, s = initial()
+                ### Store in buffer
 
-            ## Visual state
+                buff.push((state, u, r, state_prime))
 
-            state = to_tensor(surf2img(draw(p, s)))
+                ### Update state
 
-            for _ in count():
+                x, state = x_prime, state_prime
 
-                ### Select and perform an action
+                ## Perform optimization step
 
-                u = greedy(eps(step), model, state.unsqueeze(0).to(device))
-                _, _, r, (p, s) = onestep((p, s), u)
-
-                step += 1
-
-                ### Update next state
-
-                next_state = to_tensor(surf2img(draw(p, s))) if r == 0 else None
-
-                ### Store the transition in memory
-
-                memory.push((state, u, r, next_state))
-
-                ### Move to the next state
-
-                state = next_state
-
-                ### Perform one step of the optimization (on the target network)
-
-                train_epoch(memory, model, device, goal, criterion, optimizer)
-
-                ### If episode is over, break
-
-                if r != 0:
-                    break
-
-            ## Update the target network, copying all weights and biases in DQN
-
-            if idx % target_update == 0:
-                goal.load_state_dict(model.state_dict())
+                if buff.is_ready():
+                    optimize()

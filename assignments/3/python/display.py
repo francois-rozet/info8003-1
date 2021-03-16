@@ -17,32 +17,6 @@ PINE = '../resources/pine_tree.png'
 CAR = '../resources/car.png'
 
 
-# Classes
-
-class PyGameDisplay:
-    def __init__(self):
-        self.screen = None
-
-    def __enter__(self):
-        self.screen = pg.display.set_mode((SIZE, SIZE))
-
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pg.display.quit()
-
-    def __bool__(self):
-        for e in pg.event.get():
-            if e.type == pg.QUIT:
-                return False
-
-        return True
-
-    def __call__(self, surf: pg.Surface):
-        self.screen.blit(surf, (0, 0))
-        pg.display.update()
-
-
 # Functions
 
 def x2p(x: int) -> float:
@@ -60,7 +34,6 @@ def h2y(h: float) -> int:
 @cache()
 def load(filename: str) -> pg.Surface:
     img = pg.image.load(filename)
-    img.convert_alpha()
 
     return img
 
@@ -141,5 +114,5 @@ def draw(p: float, s: float) -> pg.Surface:
     return surf
 
 
-def surf2img(surf: pg.Surface) -> np.array:
-    return pg.surfarray.pixels3d(surf).swapaxes(0, 1)
+def surf2img(surf: pg.Surface) -> np.ndarray:
+    return pg.surfarray.pixels3d(surf).swapaxes(0, 1).copy()
