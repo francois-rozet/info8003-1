@@ -238,3 +238,45 @@ if __name__ == '__main__':
 
                 if buff.is_ready():
                     optimize()
+
+    # Save model
+
+    torch.save(model.state_dict(), 'model.pth')
+
+    # Evaluation
+
+    ## State space
+
+    resolution = 0.02
+
+    P = np.arange(-1., 1., resolution) + resolution / 2
+    S = np.arange(-3., 3., resolution) + resolution / 2
+
+    ## Q
+
+    with torch.no_grad():
+        Q = []
+        buff = []
+
+        for p in P:
+            for s in S:
+                buff.append(state2visual((p, s)))
+
+                if len(buff) == 512:
+                    x = torch.stack(buff).to(device)
+                    q = model(x).cpu()
+                    Q.append(q)
+
+                    buff = []
+
+        if buff:
+            x = torch.stack(buff).to(device)
+            q = model(x).cpu()
+            Q.append(q)
+
+        Q = torch.cat(Q)
+        Q = Q.view(len(P), len(S), len(U)).numpy()
+
+    ## Save
+    np.savetxt('q_left.txt', Q[..., 0], fmt='%.3e')
+    np.savetxt('q_right.txt', Q[..., 1], fmt='%.3e')
