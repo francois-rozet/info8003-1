@@ -173,15 +173,17 @@ def optimize():
         y.to(device)
     )
 
-    # Compute Q(x, u)
-
-    q = model(x).gather(1, u.view(-1, 1)).squeeze(1)
-
     # Compute max_u' Q(x', u')
 
     with torch.no_grad():
-        q_max = goal(y).max(1)[0]
+        targetnet.eval()
+        q_max = targetnet(y).max(1)[0]
         target = torch.where(r != 0, r, gamma * q_max)
+
+    # Compute Q(x, u)
+
+    model.train()
+    q = model(x).gather(1, u.view(-1, 1)).squeeze(1)
 
     # Optimize
 
@@ -202,24 +204,28 @@ if __name__ == '__main__':
 
     # Setup
 
+    DOUBLE = False  # Double Q-learning or not
+
     buff = ReplayBuffer()
     model = DQN().to(device)
-    goal = DQN().to(device)
+    targetnet = DQN().to(device)
 
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    # Online Double Q-learning
+    # Online Deep Q-learning
 
     for epoch in tqdm(range(100)):  # epochs
-        goal.load_state_dict(model.state_dict())
-        goal.eval()
+        if DOUBLE:
+            targetnet.load_state_dict(model.state_dict())
+        else:
+            targetnet = model
 
         for _ in range(5):  # trajectories
             r, x = 0, initial()
             state = state2visual(x)
 
-            while r == 0:
+            while not terminal(x):
                 ## Take action
 
                 u = greedy(eps(epoch), model, state.to(device))
@@ -238,10 +244,6 @@ if __name__ == '__main__':
 
                 if buff.is_ready():
                     optimize()
-
-    # Save model
-
-    torch.save(model.state_dict(), 'model.pth')
 
     # Evaluation
 
@@ -278,5 +280,7 @@ if __name__ == '__main__':
         Q = Q.view(len(P), len(S), len(U)).numpy()
 
     ## Save
-    np.savetxt('q_left.txt', Q[..., 0], fmt='%.3e')
-    np.savetxt('q_right.txt', Q[..., 1], fmt='%.3e')
+    name = 'dqn' if DOUBLE else 'dql'
+
+    np.savetxt(f'{name}_left.txt', Q[..., 0], fmt='%.3e')
+    np.savetxt(f'{name}_right.txt', Q[..., 1], fmt='%.3e')
