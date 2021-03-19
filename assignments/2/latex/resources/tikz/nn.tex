@@ -1,0 +1,231 @@
+\documentclass[tikz]{standalone}
+\usepackage{fontspec}
+\setmainfont{Latin Modern Math}
+\usetikzlibrary{arrows}
+\usetikzlibrary{graphs}
+\usetikzlibrary{graphdrawing}
+
+% from: https://tex.stackexchange.com/questions/453132/fresh-install-of-tl2018-no-tikz-graph-drawing-libraries-found
+\usepackage{luacode}
+\begin{luacode*}
+	function pgf_lookup_and_require(name)
+	local sep = package.config:sub(1,1)
+	local function lookup(name)
+	local sub = name:gsub('%.',sep)  
+	if kpse.find_file(sub, 'lua') then
+	require(name)
+	elseif kpse.find_file(sub, 'clua') then
+	collectgarbage('stop') 
+	require(name)
+	collectgarbage('restart')
+	else
+	return false
+	end
+	return true
+	end
+	return
+	lookup('pgf.gd.' .. name .. '.library') or
+	lookup('pgf.gd.' .. name) or
+	lookup(name .. '.library') or
+	lookup(name) 
+	end
+\end{luacode*}
+
+\usegdlibrary{layered}
+\begin{document}
+\begin{tikzpicture}[grow'=right, level distance=45mm, sibling distance=5mm, semithick, >=stealth']
+\graph [layered layout, ] {
+1/"" [,circle, draw=black, fill=white, minimum size=16pt, label=left:{$p$}],
+2/"" [,circle, draw=black, fill=white, minimum size=16pt, label=left:{$s$}],
+3/"" [,circle, draw=black, fill=white, minimum size=16pt, label=left:{$u$}],
+4/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20, label=above:{ReLU}],
+5/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+6/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+7/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+8/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+9/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+10/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+11/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+12/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20, label=above:{ReLU}],
+13/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+14/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+15/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+16/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+17/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+18/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+19/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+20/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20, label=above:{ReLU}],
+21/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+22/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+23/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+24/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+25/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+26/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+27/"{\small $f$}" [,circle, draw=black, fill=white, minimum size=16pt, fill=blue!20],
+28/"" [,circle, draw=black, fill=white, minimum size=16pt, label=right:{$\hat{Q}_N$}],
+;
+1 -> [,] 4;
+1 -> [,] 5;
+1 -> [,] 6;
+1 -> [,] 7;
+1 -> [,] 8;
+1 -> [,] 9;
+1 -> [,] 10;
+1 -> [,] 11;
+2 -> [,] 4;
+2 -> [,] 5;
+2 -> [,] 6;
+2 -> [,] 7;
+2 -> [,] 8;
+2 -> [,] 9;
+2 -> [,] 10;
+2 -> [,] 11;
+3 -> [,] 4;
+3 -> [,] 5;
+3 -> [,] 6;
+3 -> [,] 7;
+3 -> [,] 8;
+3 -> [,] 9;
+3 -> [,] 10;
+3 -> [,] 11;
+4 -> [,] 12;
+4 -> [,] 13;
+4 -> [,] 14;
+4 -> [,] 15;
+4 -> [,] 16;
+4 -> [,] 17;
+4 -> [,] 18;
+4 -> [,] 19;
+5 -> [,] 12;
+5 -> [,] 13;
+5 -> [,] 14;
+5 -> [,] 15;
+5 -> [,] 16;
+5 -> [,] 17;
+5 -> [,] 18;
+5 -> [,] 19;
+6 -> [,] 12;
+6 -> [,] 13;
+6 -> [,] 14;
+6 -> [,] 15;
+6 -> [,] 16;
+6 -> [,] 17;
+6 -> [,] 18;
+6 -> [,] 19;
+7 -> [,] 12;
+7 -> [,] 13;
+7 -> [,] 14;
+7 -> [,] 15;
+7 -> [,] 16;
+7 -> [,] 17;
+7 -> [,] 18;
+7 -> [,] 19;
+8 -> [,] 12;
+8 -> [,] 13;
+8 -> [,] 14;
+8 -> [,] 15;
+8 -> [,] 16;
+8 -> [,] 17;
+8 -> [,] 18;
+8 -> [,] 19;
+9 -> [,] 12;
+9 -> [,] 13;
+9 -> [,] 14;
+9 -> [,] 15;
+9 -> [,] 16;
+9 -> [,] 17;
+9 -> [,] 18;
+9 -> [,] 19;
+10 -> [,] 12;
+10 -> [,] 13;
+10 -> [,] 14;
+10 -> [,] 15;
+10 -> [,] 16;
+10 -> [,] 17;
+10 -> [,] 18;
+10 -> [,] 19;
+11 -> [,] 12;
+11 -> [,] 13;
+11 -> [,] 14;
+11 -> [,] 15;
+11 -> [,] 16;
+11 -> [,] 17;
+11 -> [,] 18;
+11 -> [,] 19;
+12 -> [,] 20;
+12 -> [,] 21;
+12 -> [,] 22;
+12 -> [,] 23;
+12 -> [,] 24;
+12 -> [,] 25;
+12 -> [,] 26;
+12 -> [,] 27;
+13 -> [,] 20;
+13 -> [,] 21;
+13 -> [,] 22;
+13 -> [,] 23;
+13 -> [,] 24;
+13 -> [,] 25;
+13 -> [,] 26;
+13 -> [,] 27;
+14 -> [,] 20;
+14 -> [,] 21;
+14 -> [,] 22;
+14 -> [,] 23;
+14 -> [,] 24;
+14 -> [,] 25;
+14 -> [,] 26;
+14 -> [,] 27;
+15 -> [,] 20;
+15 -> [,] 21;
+15 -> [,] 22;
+15 -> [,] 23;
+15 -> [,] 24;
+15 -> [,] 25;
+15 -> [,] 26;
+15 -> [,] 27;
+16 -> [,] 20;
+16 -> [,] 21;
+16 -> [,] 22;
+16 -> [,] 23;
+16 -> [,] 24;
+16 -> [,] 25;
+16 -> [,] 26;
+16 -> [,] 27;
+17 -> [,] 20;
+17 -> [,] 21;
+17 -> [,] 22;
+17 -> [,] 23;
+17 -> [,] 24;
+17 -> [,] 25;
+17 -> [,] 26;
+17 -> [,] 27;
+18 -> [,] 20;
+18 -> [,] 21;
+18 -> [,] 22;
+18 -> [,] 23;
+18 -> [,] 24;
+18 -> [,] 25;
+18 -> [,] 26;
+18 -> [,] 27;
+19 -> [,] 20;
+19 -> [,] 21;
+19 -> [,] 22;
+19 -> [,] 23;
+19 -> [,] 24;
+19 -> [,] 25;
+19 -> [,] 26;
+19 -> [,] 27;
+20 -> [,] 28;
+21 -> [,] 28;
+22 -> [,] 28;
+23 -> [,] 28;
+24 -> [,] 28;
+25 -> [,] 28;
+26 -> [,] 28;
+27 -> [,] 28;
+};
+
+\end{tikzpicture}
+
+\end{document}
