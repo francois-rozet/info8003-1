@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 
+import math
 import numpy as np
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from itertools import islice
 from torchvision.transforms.functional import to_tensor
 from tqdm import tqdm
 
@@ -57,6 +60,65 @@ def greedy(
             return model(state.unsqueeze(0)).argmax().item()
     else:
         return random.randrange(2)
+
+
+## Expected return
+
+def samples(mu: Policy, N: int, n: int = 50, seed: int = 0) -> List[Trajectory]:
+    '''Monte Carlo samples'''
+
+    random.seed(seed)
+
+    trajectories = []
+
+    for _ in range(n):
+        h = list(islice(simulate(mu), N))  # truncated
+        trajectories.append(h)
+
+    return trajectories
+
+
+def policify(mu: np.array) -> Policy:
+    mu *= 4
+
+    def f(x: State) -> Action:
+        p, s = x
+        p, s = (p + 1) / 2, (s + 3) / 6
+        i, j = int(p * mu.shape[0]), int(s * mu.shape[1])
+        i, j = min(i, mu.shape[0] - 1), min(j, mu.shape[1] - 1)
+
+        return U.index(mu[i, j])
+
+    return f
+
+
+def nth(h: Trajectory, N: int) -> Tuple[int, Transition]:
+    '''N-th transition or last'''
+
+    if type(h) is list:
+        t = min(len(h), N) - 1
+        l = h[t]
+    else:
+        for t, l in zip(range(N), h):
+            pass
+
+    return t, l
+
+
+def cumulative_reward(h: Trajectory, N: int) -> Transition:
+    '''Cumulative reward after N steps'''
+
+    t, (_, _, r, _) = nth(h, N)
+
+    return (gamma ** t) * r  # taking advantage of null rewards
+
+
+def expected_return(trajectories: List[Trajectory], N: int) -> Reward:
+    '''Expected return by Monte Carlo'''
+
+    total = sum(cumulative_reward(h, N) for h in trajectories)
+
+    return total / len(trajectories)
 
 
 # Classes
@@ -279,9 +341,21 @@ if __name__ == '__main__':
         Q = torch.cat(Q)
         Q = Q.view(len(P), len(S), len(U)).numpy()
 
+    ## mû
+
+    mu_hat = 2 * Q.argmax(axis=-1) - 1
+
+    ## J^mû_N'
+
+    N_prime = math.ceil(math.log((1e-2 / B_r), gamma))
+
+    trajectories = samples(policify(mu_hat), N_prime)
+    j_hat = expected_return(trajectories, N_prime)
+
     ## Save
 
     name = 'dqn' if DOUBLE else 'dql'
 
     np.savetxt(f'{name}_left.txt', Q[..., 0], fmt='%.3e')
     np.savetxt(f'{name}_right.txt', Q[..., 1], fmt='%.3e')
+    np.savetxt(f'{name}_j_hat.txt', np.array([j_hat]))
