@@ -37,7 +37,7 @@ def state2visual(x: State, factor: int = 4) -> VisualState:
 
 ## Epsilon-greedy policy
 
-def eps(
+def epsilon(
     step: int,
     start: float = 0.95,
     end: float = 0.05,
@@ -79,15 +79,13 @@ def samples(mu: Policy, N: int, n: int = 50, seed: int = 0) -> List[Trajectory]:
 
 
 def policify(mu: np.array) -> Policy:
-    mu *= 4
-
     def f(x: State) -> Action:
         p, s = x
         p, s = (p + 1) / 2, (s + 3) / 6
         i, j = int(p * mu.shape[0]), int(s * mu.shape[1])
         i, j = min(i, mu.shape[0] - 1), min(j, mu.shape[1] - 1)
 
-        return U.index(mu[i, j])
+        return mu[i, j]
 
     return f
 
@@ -258,15 +256,17 @@ def optimize():
 
 
 if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-double', default=False, action='store_true')
+    args = parser.parse_args()
+
     # Device
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
 
     # Setup
-
-    DOUBLE = False  # Double Q-learning or not
 
     buff = ReplayBuffer()
     model = DQN().to(device)
@@ -278,7 +278,7 @@ if __name__ == '__main__':
     # Online Deep Q-learning
 
     for epoch in tqdm(range(100)):  # epochs
-        if DOUBLE:
+        if args.double:
             targetnet.load_state_dict(model.state_dict())
         else:
             targetnet = model
@@ -290,7 +290,7 @@ if __name__ == '__main__':
             while not terminal(x):
                 ## Take action
 
-                u = greedy(eps(epoch), model, state.to(device))
+                u = greedy(epsilon(epoch), model, state.to(device))
                 _, _, r, x_prime = onestep(x, u)
                 state_prime = state2visual(x_prime)
 
@@ -343,19 +343,21 @@ if __name__ == '__main__':
 
     ## mû
 
-    mu_hat = 2 * Q.argmax(axis=-1) - 1
+    mu_hat = Q.argmax(axis=-1)
 
     ## J^mû_N'
 
-    N_prime = math.ceil(math.log((1e-2 / B_r), gamma))
+    N_prime = math.ceil(math.log((eps / B_r), gamma))
 
     trajectories = samples(policify(mu_hat), N_prime)
     j_hat = expected_return(trajectories, N_prime)
 
+    print('J^mû_N =', j_hat)
+    print()
+
     ## Save
 
-    name = 'dqn' if DOUBLE else 'dql'
+    name = 'dqn' if args.double else 'dql'
 
-    np.savetxt(f'{name}_left.txt', Q[..., 0], fmt='%.3e')
-    np.savetxt(f'{name}_right.txt', Q[..., 1], fmt='%.3e')
-    np.savetxt(f'{name}_j_hat.txt', np.array([j_hat]))
+    np.savetxt(f'{name}_q0.txt', Q[..., 0], fmt='%.3e')
+    np.savetxt(f'{name}_q1.txt', Q[..., 1], fmt='%.3e')
