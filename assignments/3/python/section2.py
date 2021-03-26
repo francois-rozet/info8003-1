@@ -175,6 +175,23 @@ class Conv(nn.Sequential):
         )
 
 
+class DoubleConv(nn.Sequential):
+    '''Generic 2D double convolution layer'''
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 5,
+        stride: int = 2,
+        padding: int = 2
+    ):
+        super().__init__(
+            Conv(in_channels, out_channels, kernel_size, 1, padding),
+            Conv(out_channels, out_channels, kernel_size, stride, padding),
+        )
+
+
 class MLP(nn.Sequential):
     '''Multi-Layer Perceptron'''
 
@@ -206,16 +223,18 @@ class DQN(nn.Module):
     def __init__(self, output_size: int = 2, **kwargs):
         super().__init__()
 
-        self.conv1 = Conv(3, 16)
-        self.conv2 = Conv(16, 32)
-        self.conv3 = Conv(32, 32)
+        self.conv1 = DoubleConv(3, 16)
+        self.conv2 = DoubleConv(16, 32)
+        self.conv3 = DoubleConv(32, 64)
+        self.conv4 = DoubleConv(64, 128)
 
-        self.last = MLP(32 * 13 ** 2, output_size, **kwargs)
+        self.last = MLP(128 * 7 ** 2, output_size, **kwargs)
 
     def forward(self, x: Batch) -> Batch:
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
+        x = self.conv4(x)
 
         return self.last(x)
 
@@ -277,37 +296,42 @@ if __name__ == '__main__':
 
     # Online Deep Q-learning
 
-    for epoch in tqdm(range(100)):  # epochs
-        if args.double:
-            targetnet.load_state_dict(model.state_dict())
-        else:
-            targetnet = model
+    with tqdm(total=100 * 25) as tq:
+        for epoch in range(100):  # epochs
+            if args.double:
+                targetnet.load_state_dict(model.state_dict())
+            else:
+                targetnet = model
 
-        for _ in range(5):  # trajectories
-            r, x = 0, initial()
-            state = state2visual(x)
+            for _ in range(25):  # trajectories
+                r, x = 0, initial()
+                state = state2visual(x)
 
-            while not terminal(x):
-                ## Take action
+                while not terminal(x):
+                    ## Take action
 
-                u = greedy(epsilon(epoch), model, state.to(device))
-                _, _, r, x_prime = onestep(x, u)
-                state_prime = state2visual(x_prime)
+                    u = greedy(epsilon(epoch), model, state.to(device))
+                    _, _, r, x_prime = onestep(x, u)
+                    state_prime = state2visual(x_prime)
 
-                ### Store in buffer
+                    ### Store in buffer
 
-                buff.push((state, u, r, state_prime))
+                    buff.push((state, u, r, state_prime))
 
-                ### Update state
+                    ### Update state
 
-                x, state = x_prime, state_prime
+                    x, state = x_prime, state_prime
 
-                ## Perform optimization step
+                    ## Perform optimization step
 
-                if buff.is_ready():
-                    optimize()
+                    if buff.is_ready():
+                        optimize()
+
+                tq.update(1)
 
     # Evaluation
+
+    model.eval()
 
     ## State space
 
