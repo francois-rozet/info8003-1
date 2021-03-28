@@ -208,17 +208,27 @@ if __name__ == '__main__':
             mu_hat = 2 * qq.argmax(axis=-1) - 1
 
             if n == transitions[-1]:
-                plt.pcolormesh(
-                    p, s, mu_hat.T,
-                    cmap='coolwarm_r',
-                    vmin=-1, vmax=1,
-                    rasterized=True
-                )
-                plt.xlabel(r'$p$')
-                plt.ylabel(r'$s$')
+                plts = {
+                    'q0': qq[..., 0],
+                    'q1': qq[..., 1],
+                    'mu': mu_hat
+                }
 
-                plt.savefig(f'5_mu_{key}.pdf')
-                plt.close()
+                for name, values in plts.items():
+                    plt.pcolormesh(
+                        p, s, values.T,
+                        cmap='coolwarm_r',
+                        vmin=-1, vmax=1,
+                        rasterized=True
+                    )
+                    plt.xlabel(r'$p$')
+                    plt.ylabel(r'$s$')
+
+                    if 'q' in name:
+                        plt.colorbar()
+
+                    plt.savefig(f'5_{name}_{key}.pdf')
+                    plt.close()
 
             ### Compute J^mû_N'
 
