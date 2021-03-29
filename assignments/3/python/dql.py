@@ -335,7 +335,7 @@ if __name__ == '__main__':
 
     ## State space
 
-    resolution = 0.02
+    resolution = 0.01
 
     P = np.arange(-1., 1., resolution) + resolution / 2
     S = np.arange(-3., 3., resolution) + resolution / 2

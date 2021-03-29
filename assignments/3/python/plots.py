@@ -24,7 +24,7 @@ if mpl.checkdep_usetex(True):
 def plot(input_file: str, output_file: str):
     ## State space
 
-    resolution = 0.02
+    resolution = 0.01
 
     p = np.arange(-1., 1., resolution) + resolution / 2
     s = np.arange(-3., 3., resolution) + resolution / 2
