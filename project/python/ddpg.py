@@ -4,9 +4,13 @@
 Implementation of Deep Deterministic Policy Gradient (DDPG) algorithm for the
 Double Inverted Pendulum control problem.
 
-Source:
-    [1] Continuous control with deep reinforcement learning, Lillicrap et al.,
+Sources:
+    [1] Continuous control with deep reinforcement learning,
+        Lillicrap et al.,
         https://arxiv.org/abs/1509.02971
+    [2] Deep Reinforcement Learning in Large Discrete Action Spaces,
+        Dulac-Arnold et al.
+        https://arxiv.org/abs/1512.07679
 """
 
 ###########
@@ -21,6 +25,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
 from typing import Tuple
 
@@ -106,15 +111,10 @@ class OrnsteinUhlenbeck:
         self.low = action_space.low
         self.high = action_space.high
 
-        n_actions = action_space.shape[0]
-
-        self.mean = np.zeros((n_actions))
-        self.cov = np.eye((n_actions))
-
         self.reset()
 
     def draw(self) -> np.array:
-        return np.random.multivariate_normal(self.mean, self.cov)
+        return np.random.normal(loc=0.0, scale=1.0)
 
     def reset(self) -> None:
         self.noise = self.draw()
@@ -128,17 +128,6 @@ class OrnsteinUhlenbeck:
 
 # Neural networks
 
-class Dense(nn.Sequential):
-    '''Generic dense layer'''
-
-    def __init__(self, input_size: int, output_size: int):
-        super().__init__(
-            nn.Linear(input_size, output_size),
-            nn.LayerNorm(output_size),
-            nn.ReLU(inplace=True)
-        )
-
-
 class MLP(nn.Sequential):
     '''Multi-Layer Perceptron'''
 
@@ -147,12 +136,17 @@ class MLP(nn.Sequential):
         input_size: int,
         output_size: int,
         hidden_size: int = 256,
-        n_layers: int = 1
+        n_layers: int = 1,
+        activation: nn.Module = nn.ReLU
     ):
-        layers = [Dense(input_size, hidden_size)]
+        layers = [
+            nn.Linear(input_size, hidden_size),
+            activation(inplace=True)
+        ]
 
         for _ in range(n_layers):
-            layers.append(Dense(hidden_size, hidden_size))
+            layers.append(nn.Linear(hidden_size, hidden_size))
+            layers.append(activation(inplace=True))
 
         layers.append(nn.Linear(hidden_size, output_size))
 
@@ -167,18 +161,24 @@ class Actor(nn.Module):
         input_size: int,
         output_size: int,
         hidden_size: int = 256,
-        n_layers: int = 1
+        n_layers: int = 1,
+        activation: nn.Module = nn.ReLU
     ):
         super().__init__()
 
-        self.mlp = MLP(input_size, output_size, hidden_size, n_layers)
+        self.mlp = MLP(
+            input_size,
+            output_size,
+            hidden_size,
+            n_layers,
+            activation
+        )
         self.tanh = nn.Tanh()
 
     def forward(self, x: Batch) -> Batch:
         x = self.mlp(x)
-        x = self.tanh(x)
 
-        return x
+        return self.tanh(x)
 
 
 class Critic(nn.Module):
@@ -189,11 +189,18 @@ class Critic(nn.Module):
         input_size: int,
         output_size: int,
         hidden_size: int = 256,
-        n_layers: int = 1
+        n_layers: int = 1,
+        activation: nn.Module = nn.ReLU
     ):
         super().__init__()
 
-        self.mlp = MLP(input_size, output_size, hidden_size, n_layers)
+        self.mlp = MLP(
+            input_size,
+            output_size,
+            hidden_size,
+            n_layers,
+            activation
+        )
 
     def forward(self, x: Batch) -> Batch:
         return self.mlp(x)
@@ -210,10 +217,13 @@ class DDPG:
         gamma: float = 0.95,
         tau: float = 1e-2,
         hidden_size: int = 256,
+        n_layers: int = 1,
+        activation: nn.Module = nn.ReLU,
         capacity: int = 2 ** 16,
         batch_size: int = 32,
         lr_actor: float = 1e-4,
-        lr_critic: float = 1e-3
+        lr_critic: float = 1e-3,
+        discrete: int = None
     ):
         # Factors
 
@@ -225,11 +235,37 @@ class DDPG:
         n_states = env.observation_space.shape[0]
         n_actions = env.action_space.shape[0]
 
-        self.actor = Actor(n_states, n_actions, hidden_size)
-        self.critic = Critic(n_states + n_actions, n_actions, hidden_size)
+        self.n_actions = n_actions
 
-        self.actor_tar = Actor(n_states, n_actions, hidden_size)
-        self.critic_tar = Critic(n_states + n_actions, n_actions, hidden_size)
+        self.actor = Actor(
+            n_states,
+            n_actions,
+            hidden_size,
+            n_layers,
+            activation
+        )
+        self.critic = Critic(
+            n_states + n_actions,
+            n_actions,
+            hidden_size,
+            n_layers,
+            activation
+        )
+
+        self.actor_tar = Actor(
+            n_states,
+            n_actions,
+            hidden_size,
+            n_layers,
+            activation
+        )
+        self.critic_tar = Critic(
+            n_states + n_actions,
+            n_actions,
+            hidden_size,
+            n_layers,
+            activation
+        )
 
         self.actor_tar.load_state_dict(self.actor.state_dict())
         self.critic_tar.load_state_dict(self.critic.state_dict())
@@ -246,40 +282,98 @@ class DDPG:
             'critic': optim.Adam(self.critic.parameters(), lr=lr_critic)
         }
 
+        # Discrete action space, if specified
+
+        if discrete is not None:
+            linspace = np.linspace(
+                start=env.action_space.low,
+                stop=env.action_space.high,
+                num=discrete
+            )
+            grid = torch.Tensor(np.meshgrid(*linspace.T))
+
+            self.U = grid.reshape(n_actions, -1).T
+
+            self.knn = NearestNeighbors(n_neighbors=discrete // 2)
+            self.knn.fit(self.U)
+
+        self.discrete = discrete
+
+    def wolpertinger(self, x: torch.Tensor) -> torch.Tensor:
+        '''Wolpertinger policy [2] used to deal with discrete action space'''
+
+        # Get (continuous) action
+        self.actor.eval()
+
+        with torch.no_grad():
+            u = self.actor(x)
+
+        # Compute k nearest actions
+
+        idx = self.knn.kneighbors(u, return_distance=False)
+        k = self.knn.n_neighbors
+
+        actions = self.U[idx.ravel()]
+        actions = actions.view((-1, k, self.n_actions))
+
+        # Choose best action
+
+        stateactions = torch.cat((
+            x.repeat_interleave(k, dim=0),
+            actions.view((-1, self.n_actions))
+        ), dim=1)
+
+        self.critic.train()
+        best = self.critic(stateactions).reshape((-1, k)).argmax(axis=1)
+
+        return actions[range(len(actions)), best]
+
     def action(self, x: np.array) -> np.array:
+        '''Get an action used trained network'''
+
         x = torch.from_numpy(x).float().unsqueeze(0)
 
         self.actor.eval()
 
-        with torch.no_grad():
-            u = self.actor.forward(x)
-            u = u.numpy()
+        # Discrete case
+        if self.discrete is not None:
+            u = self.wolpertinger(x)
 
-            return u
+        # Continous case
+        else:
+            with torch.no_grad():
+                u = self.actor(x)
 
-    def optimize(self):
+        return u.numpy()
+
+    def optimize(self) -> None:
+        '''Optimize networks'''
+
+        # Get batches
+
         x, u, r, x_prime, done = self.memory.sample()
 
         # Update Q-function by one step of gradient descent
 
         self.critic.train()
-        q = self.critic.forward(torch.cat([x, u], 1))
+        q = self.critic(torch.cat([x, u], 1))
 
-        with torch.no_grad():
-            self.actor_tar.eval()
-            u_prime = self.actor_tar.forward(x_prime)
+        if self.discrete is not None:
+            u_prime = self.wolpertinger(x_prime)
+        else:
+            with torch.no_grad():
+                self.actor_tar.eval()
+                u_prime = self.actor_tar(x_prime)
 
         self.critic_tar.train()
-        q_max = self.critic_tar.forward(torch.cat([x_prime, u_prime], 1))
+        q_max = self.critic_tar(torch.cat([x_prime, u_prime], 1))
         target = r + (1 - done) * self.gamma * q_max
 
         critic_loss = self.criterion(q, target)
 
         # Update policy by one step of gradien ascent
 
-        policy_loss = -self.critic.forward(
-            torch.cat([x, self.actor.forward(x)], 1)
-        ).mean()
+        policy_loss = -self.critic(torch.cat([x, self.actor(x)], 1)).mean()
 
         # Optimize
 
@@ -319,7 +413,11 @@ class DDPG:
 
 def main(
     render: bool = False,
-    n_episodes: int = 400
+    n_episodes: int = 500,
+    discrete: int = None,
+    n_layers: int = 1,
+    gamma: float = 0.95,
+    activation_id: str = 'relu'
 ):
     # Environment
 
@@ -337,15 +435,27 @@ def main(
 
     # Setup
 
-    gamma = 0.95
     max_steps = 1000
+    n_evaluate = 50  # number of episodes to evaluate model
 
     rewards = []
-    durations = []
 
     # Agent
 
-    agent = DDPG(env, gamma=gamma)
+    activations = {
+        'relu': nn.ReLU,
+        'elu': nn.ELU
+    }
+
+    activation = activations.get(activation_id)
+
+    agent = DDPG(
+        env,
+        gamma=gamma,
+        discrete=discrete,
+        n_layers=n_layers,
+        activation=activation
+    )
     noise = OrnsteinUhlenbeck(env.action_space)
 
     # Training
@@ -354,13 +464,13 @@ def main(
         x = env.reset()
         noise.reset()
 
-        ecr = 0
-
         # Simulate the episode until terminal state or max number of steps
 
         for step in range(max_steps):
             u = agent.action(x)
-            u = noise.action(u)
+
+            if discrete is None:
+                u = noise.action(u)
 
             x_prime, r, done, _ = env.step(u)
 
@@ -381,41 +491,52 @@ def main(
 
             x = x_prime
 
-            # Expected cumulative reward
-
-            ecr += (1 - done) * (gamma ** step) * r
-
             # If terminal state, stop the episode
 
             if done:
                 break
 
-        rewards.append(ecr)
-        durations.append(step)
+        # Evaluation
+
+        evals = []
+
+        for _ in range(n_evaluate):
+            x = env.reset()
+            cr = 0  # cumulative reward
+
+            for step in range(max_steps):
+                u = agent.action(x)
+                x, r, done, _ = env.step(u)
+
+                if done:
+                    break
+
+                cr += (gamma ** step) * r
+
+            evals.append(cr)
+
+        rewards.append(evals)
 
     # Export results
 
-    data = {
-        'rewards': {
-            'value': rewards,
-            'label': 'Expected cumulative reward',
-            'file': 'rewards.pdf'
-        },
-        'durations': {
-            'value': durations,
-            'label': 'Duration (number of steps)',
-            'file': 'durations.pdf'
-        }
-    }
+    rewards = np.array(rewards)
 
-    for value in data.values():
-        plt.plot(value['value'])
+    mean = np.mean(rewards, axis=1)
+    std = np.std(rewards, axis=1)
 
-        plt.xlabel('Episode')
-        plt.ylabel(value['label'])
+    plt.plot(mean)
+    plt.fill_between(
+        range(n_episodes),
+        mean - std,
+        mean + std,
+        alpha=0.3
+    )
 
-        plt.savefig(value['file'])
-        plt.close()
+    plt.xlabel('Episode')
+    plt.ylabel(r'$J^{\mu}$')
+
+    plt.savefig(f'ddpg_J_{discrete}_{n_layers}_{gamma}.pdf')
+    plt.close()
 
 
 if __name__ == '__main__':
@@ -424,11 +545,19 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-render', default=False, action='store_true')
-    parser.add_argument('-episodes', type=int, default=400)
+    parser.add_argument('-episodes', type=int, default=500)
+    parser.add_argument('-discrete', type=int, default=None)
+    parser.add_argument('-layers', type=int, default=1)
+    parser.add_argument('-gamma', type=float, default=0.95)
+    parser.add_argument('-activation', type=str, default='relu', choices=['relu', 'elu'])
 
     args = parser.parse_args()
 
     main(
         render=args.render,
         n_episodes=args.episodes,
+        discrete=args.discrete,
+        n_layers=args.layers,
+        gamma=args.gamma,
+        activation_id=args.activation
     )

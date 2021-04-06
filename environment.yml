@@ -14,4 +14,5 @@ dependencies:
     - numpy==1.19.5
     - pybullet==3.1.0
     - pygame==2.0.1
+    - scikit-learn==0.24.1
     - tqdm==4.58.0
